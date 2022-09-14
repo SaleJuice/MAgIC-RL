@@ -1,0 +1,3 @@
+wandb/*
+magic_rl.egg-info/*
+outputs/*
