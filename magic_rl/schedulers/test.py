@@ -1,7 +1,7 @@
 '''
-FilePath: /MAgIC-RL/test.py
+FilePath: /MAgIC-RL/magic_rl/schedulers/test.py
 Date: 2022-09-07 11:29:49
-LastEditTime: 2022-09-10 22:02:02
+LastEditTime: 2022-09-13 12:30:18
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -160,7 +160,7 @@ if __name__ == '__main__':
 from typing import List, Dict
 import numpy as np
 
-from episode import Episode
+from magic_rl.buffers.episode import Episode
 
 
 def grab_red_envelope(num_people, amount) -> list:
@@ -273,8 +273,8 @@ import torch.distributions as D
 import gym
 from gym import spaces
 
-from buffer import ReplayBuffer
-from network import CriticNetwork, PolicyNetwork
+from magic_rl.buffers.buffer import ReplayBuffer
+from magic_rl.networks.network import CriticNetwork, PolicyNetwork
 
 
 class SacAgent(object):

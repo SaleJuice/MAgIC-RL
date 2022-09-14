@@ -1,7 +1,7 @@
 '''
-FilePath: /MAgIC-RL/agent.py
+FilePath: /MAgIC-RL/magic_rl/agents/sac_agent.py
 Date: 2022-09-06 20:02:18
-LastEditTime: 2022-09-10 22:01:48
+LastEditTime: 2022-09-14 12:19:44
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -23,10 +23,11 @@ import torch.nn.functional as F
 from torch.distributions import Normal
 
 import gym
+from gym_fish.envs.t_1 import T1Env
 
-from buffer import ReplayBuffer
-from network import CriticNetwork, PolicyNetwork
-from utils import NormalizedActions
+from magic_rl.buffers.buffer import ReplayBuffer
+from magic_rl.networks.network import CriticNetwork, ActorNetwork
+from magic_rl.utils.utils import NormalizedActions
 
 
 class SacAgent(object):
@@ -37,15 +38,14 @@ class SacAgent(object):
     paper: https://arxiv.org/pdf/1812.05905.pdf
     '''
     
-    def __init__(self, state_dim, action_dim, hidden_dim, replay_buffer, action_range, device):
-        self.replay_buffer = replay_buffer
+    def __init__(self, state_dim, action_dim, hidden_dim, action_range, device):
         self.device = device
 
         self.soft_q_net1 = CriticNetwork(state_dim, action_dim, hidden_dim).to(self.device)
         self.soft_q_net2 = CriticNetwork(state_dim, action_dim, hidden_dim).to(self.device)
         self.target_soft_q_net1 = CriticNetwork(state_dim, action_dim, hidden_dim).to(self.device)
         self.target_soft_q_net2 = CriticNetwork(state_dim, action_dim, hidden_dim).to(self.device)
-        self.policy_net = PolicyNetwork(state_dim, action_dim, hidden_dim, action_range).to(self.device)
+        self.policy_net = ActorNetwork(state_dim, action_dim, hidden_dim, action_range).to(self.device)
         self.log_alpha = torch.zeros(1, dtype=torch.float32, requires_grad=True, device=self.device)
 
         for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):
@@ -98,9 +98,9 @@ class SacAgent(object):
         
         return action
     
-    def update(self, batch_size, reward_scale=10., auto_entropy=True, target_entropy=-2, gamma=0.99,soft_tau=1e-2):
+    def update(self, batch_buff, reward_scale=10., auto_entropy=True, target_entropy=-2, gamma=0.99, soft_tau=0.005):  # FIXME soft_tau=1e-2
     # Sampling from replay buffer
-        state, action, reward, next_state, done = self.replay_buffer.sample(batch_size)
+        state, action, reward, next_state, done = batch_buff
 
         state      = torch.FloatTensor(state).to(self.device)
         next_state = torch.FloatTensor(next_state).to(self.device)
@@ -108,18 +108,16 @@ class SacAgent(object):
         reward     = torch.FloatTensor(reward).unsqueeze(1).to(self.device)  # reward is single value, unsqueeze() to add one dim to be [reward] at the sample dim;
         done       = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(self.device)
 
-        reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(dim=0) + 1e-6) # normalize with batch mean and std; plus a small number to prevent numerical problem
+        # reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(dim=0) + 1e-6) # normalize with batch mean and std; plus a small number to prevent numerical problem
 
         predicted_q_value1 = self.soft_q_net1(state, action)
         predicted_q_value2 = self.soft_q_net2(state, action)
         new_action, log_prob, _, _, _           = self.evaluate(state)
-        new_next_action, next_log_prob, _, _, _ = self.evaluate(next_state)
     
     # Updating alpha wrt entropy
         # alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q) 
         if auto_entropy is True:
             alpha_loss = -(self.log_alpha * (log_prob + target_entropy).detach()).mean()
-            # print('alpha loss: ',alpha_loss)
             self.alpha_optimizer.zero_grad()
             alpha_loss.backward()
             self.alpha_optimizer.step()
@@ -129,8 +127,11 @@ class SacAgent(object):
             alpha_loss = 0
 
     # Training Q Function
-        target_q_min = torch.min(self.target_soft_q_net1(next_state, new_next_action),self.target_soft_q_net2(next_state, new_next_action)) - self.alpha * next_log_prob
-        target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
+        with torch.no_grad():
+            new_next_action, next_log_prob, _, _, _ = self.evaluate(next_state)
+            target_q_min = torch.min(self.target_soft_q_net1(next_state, new_next_action),self.target_soft_q_net2(next_state, new_next_action)) - self.alpha * next_log_prob
+            target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
+
         q_value_loss1 = nn.MSELoss()(predicted_q_value1, target_q_value.detach())  # detach: no gradients for the variable
         q_value_loss2 = nn.MSELoss()(predicted_q_value2, target_q_value.detach())
 
@@ -157,7 +158,7 @@ class SacAgent(object):
         for target_param, param in zip(self.target_soft_q_net2.parameters(), self.soft_q_net2.parameters()):
             target_param.data.copy_(target_param.data * (1.0 - soft_tau) + param.data * soft_tau)
         
-        return q_value_loss1, q_value_loss2, policy_loss
+        return q_value_loss1, q_value_loss2, policy_loss, alpha_loss
 
     def save_model(self, path):
         torch.save(self.soft_q_net1.state_dict(), path+'_q1')
@@ -176,8 +177,9 @@ class SacAgent(object):
 
 if __name__ == '__main__':
     # choose env
-    env = NormalizedActions(gym.make("Pendulum-v1"))
+    # env = NormalizedActions(gym.make("Pendulum-v0"))
     # env = NormalizedActions(gym.make("LunarLanderContinuous-v2"))
+    env = NormalizedActions(T1Env(ctrl_dt=0.2, max_time=10))
 
     # replay buffer
     replay_buffer = ReplayBuffer(1e6)
@@ -186,20 +188,24 @@ if __name__ == '__main__':
     state_dim  = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
     action_range = 1.
-    sac_agent = SacAgent(state_dim=state_dim, action_dim=action_dim, hidden_dim=512, replay_buffer=replay_buffer, action_range=action_range, device=torch.device("cuda:0"))
+    sac_agent = SacAgent(state_dim=state_dim, action_dim=action_dim, hidden_dim=256, replay_buffer=replay_buffer, action_range=action_range, device=torch.device("cuda:0"))
 
     # logger
     from torch.utils.tensorboard import SummaryWriter
-    sac_logger = SummaryWriter(log_dir="outputs/sac_v2/log/Pendulum-v1/")
+    # sac_logger = SummaryWriter(log_dir="outputs/sac_v2/log/Pendulum-v1/3/")
     # sac_logger = SummaryWriter(log_dir="outputs/sac_v2/log/LunarLanderContinuous-v2/")
+    sac_logger = SummaryWriter(log_dir="outputs/sac_v2/log/FishGym-v2/5/")
 
     # hyper-parameters for RL training
-    batch_size  = 300
+    batch_size  = 256
 
+    all_steps = 0
     # training loop
-    for episode in range(1000+1):
+    for episode in range(1_000_000+1):
         obs =  env.reset()
+        print("env reset successed.")
         episode_reward = 0
+        episode_len = 0
         for step in range(150):
             action = sac_agent.get_action(obs, deterministic = False)
             next_obs, reward, done, _ = env.step(action)
@@ -209,15 +215,22 @@ if __name__ == '__main__':
             
             obs = next_obs
             episode_reward += reward
+            episode_len += 1
+            all_steps += 1
             
             if len(replay_buffer) > batch_size:
-                q_value_loss1, q_value_loss2, policy_loss = sac_agent.update(batch_size, reward_scale=10., auto_entropy=False)
-                sac_logger.add_scalar("q_value_loss1", q_value_loss1, episode)
-                sac_logger.add_scalar("q_value_loss2", q_value_loss2, episode)
-                sac_logger.add_scalar("policy_loss", policy_loss, episode)
+                q_value_loss1, q_value_loss2, policy_loss, alpha_loss = sac_agent.update(batch_size, reward_scale=20., auto_entropy=True, target_entropy=-4)
+                sac_logger.add_scalar("loss/q_value_loss1", q_value_loss1, all_steps)
+                sac_logger.add_scalar("loss/q_value_loss2", q_value_loss2, all_steps)
+                sac_logger.add_scalar("loss/policy_loss", policy_loss, all_steps)
+                sac_logger.add_scalar("loss/alpha_loss", alpha_loss, all_steps)
                     
             if done:
                 break
         
-        sac_logger.add_scalar("episode reward", episode_reward, episode)
+        sac_logger.add_scalar("episode/reward", episode_reward, all_steps)
+        sac_logger.add_scalar("episode/len", episode_len, all_steps)
         print(f"Episode: {episode} | Episode Reward: {episode_reward}")
+        # env.save_traj(suffix=f"{all_steps}".zfill(10))
+        print("save img successed, waiting to reset env.")
+

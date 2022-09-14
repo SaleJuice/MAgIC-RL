@@ -1,7 +1,7 @@
 '''
-FilePath: /torch-rl/network.py
+FilePath: /MAgIC-RL/network.py
 Date: 2022-08-31 15:49:33
-LastEditTime: 2022-09-10 19:32:22
+LastEditTime: 2022-09-11 11:48:57
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -49,12 +49,12 @@ class CriticNetwork(nn.Module):
         return x  # value of this action under this state
 
 
-class PolicyNetwork(nn.Module):
+class ActorNetwork(nn.Module):
     '''
     Attention: this is policy network for continuous observation continuous action(COCA).
     '''
     def __init__(self, state_dims:int, action_dims:int, hidden_size, action_range=1., init_w=3e-3, log_std_min=-20, log_std_max=2):
-        super(PolicyNetwork, self).__init__()
+        super(ActorNetwork, self).__init__()
         # build architecture of network
         # XXX to achieve more flexible hidden size
         self.linear1 = nn.Linear(state_dims, hidden_size)

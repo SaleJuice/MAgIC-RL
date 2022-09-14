@@ -1,7 +1,7 @@
 '''
-FilePath: /MAgIC-RL/train.py
+FilePath: /MAgIC-RL/magic_rl/schedulers/train.py
 Date: 2022-09-10 22:01:43
-LastEditTime: 2022-09-10 22:02:48
+LastEditTime: 2022-09-13 12:42:58
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -24,16 +24,21 @@ from torch.distributions import Normal
 
 import gym
 
-from buffer import ReplayBuffer
-from network import CriticNetwork, PolicyNetwork
-from agent import SacAgent
-from utils import NormalizedActions
+from magic_rl.buffers.buffer import ReplayBuffer
+from magic_rl.networks.network import CriticNetwork, PolicyNetwork
+from magic_rl.agents.sac_agent import SacAgent
+from magic_rl.utils.utils import NormalizedActions
+
+
+class trainer():
+    def __init__(self) -> None:
+        pass
+
 
 
 if __name__ == '__main__':
     # choose env
     env = NormalizedActions(gym.make("Pendulum-v1"))
-    # env = NormalizedActions(gym.make("LunarLanderContinuous-v2"))
 
     # replay buffer
     replay_buffer = ReplayBuffer(1e6)
@@ -47,7 +52,6 @@ if __name__ == '__main__':
     # logger
     from torch.utils.tensorboard import SummaryWriter
     sac_logger = SummaryWriter(log_dir="outputs/sac_v2/log/Pendulum-v1/")
-    # sac_logger = SummaryWriter(log_dir="outputs/sac_v2/log/LunarLanderContinuous-v2/")
 
     # hyper-parameters for RL training
     batch_size  = 300
