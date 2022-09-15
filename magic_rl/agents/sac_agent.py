@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/agents/sac_agent.py
 Date: 2022-09-06 20:02:18
-LastEditTime: 2022-09-14 12:19:44
+LastEditTime: 2022-09-15 14:32:21
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -27,7 +27,7 @@ from gym_fish.envs.t_1 import T1Env
 
 from magic_rl.buffers.buffer import ReplayBuffer
 from magic_rl.networks.network import CriticNetwork, ActorNetwork
-from magic_rl.utils.utils import NormalizedActions
+from magic_rl.utils.gym_utils import NormalizedActions
 
 
 class SacAgent(object):
@@ -160,16 +160,24 @@ class SacAgent(object):
         
         return q_value_loss1, q_value_loss2, policy_loss, alpha_loss
 
-    def save_model(self, path):
-        torch.save(self.soft_q_net1.state_dict(), path+'_q1')
-        torch.save(self.soft_q_net2.state_dict(), path+'_q2')
-        torch.save(self.policy_net.state_dict(), path+'_policy')
+    def save_model(self, wb_dir):
+        if not os.path.exists(wb_dir): os.makedirs(wb_dir)
+        torch.save(self.soft_q_net1.state_dict(), os.path.join(wb_dir, "q1.pth"))
+        torch.save(self.soft_q_net2.state_dict(), os.path.join(wb_dir, "q2.pth"))
+        torch.save(self.policy_net.state_dict(), os.path.join(wb_dir, "policy.pth"))
 
-    def load_model(self, path):
-        self.soft_q_net1.load_state_dict(torch.load(path+'_q1'))
-        self.soft_q_net2.load_state_dict(torch.load(path+'_q2'))
-        self.policy_net.load_state_dict(torch.load(path+'_policy'))
+    def load_model(self, wb_dir):
+        assert os.path.exists(wb_dir), f"Directory '{wb_dir}' of weights and biases is not exist."
+        self.soft_q_net1.load_state_dict(torch.load(os.path.join(wb_dir, "q1.pth")))
+        self.soft_q_net2.load_state_dict(torch.load(os.path.join(wb_dir, "q2.pth")))
+        self.policy_net.load_state_dict(torch.load(os.path.join(wb_dir, "policy.pth")))
 
+    def set_train(self):
+        self.soft_q_net1.train()
+        self.soft_q_net2.train()
+        self.policy_net.train()
+
+    def set_eval(self):
         self.soft_q_net1.eval()
         self.soft_q_net2.eval()
         self.policy_net.eval()
