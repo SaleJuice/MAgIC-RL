@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/schedulers/evaluator.py
 Date: 2022-09-13 15:58:39
-LastEditTime: 2022-09-13 21:13:42
+LastEditTime: 2022-09-14 22:29:02
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -32,7 +32,7 @@ class Evaluator(object):
 
     def run(self, schedule:Dict[str, int]):
         assert (len(schedule) == 1), f"Expect a 'dict' type variable which length is '1', but get '{len(schedule)}'!"
-        assert ("step" in schedule.keys() or "episode" in schedule.keys()), f"Illegal schedule '{schedule}' of which the key have to be one of 'episode' and 'step'."
+        assert ("steps" in schedule.keys() or "episodes" in schedule.keys()), f"Illegal schedule '{schedule}' of which the key have to be one of 'episodes' and 'steps'."
 
         steps = 0
         episodes = 0
@@ -60,7 +60,7 @@ class Evaluator(object):
                 if done:
                     break
 
-                if "step" in schedule.keys() and steps >= schedule["step"]:  # overflow check 
+                if "steps" in schedule.keys() and steps >= schedule["steps"]:  # overflow check 
                     break
             
             if self.verbose > 0:
@@ -76,10 +76,10 @@ class Evaluator(object):
             
             episodes += 1
 
-            if "episode" in schedule.keys() and episodes >= schedule["episode"]:  # overflow check 
+            if "episodes" in schedule.keys() and episodes >= schedule["episodes"]:  # overflow check 
                 break
             
-            if "step" in schedule.keys() and steps >= schedule["step"]:  # overflow check 
+            if "steps" in schedule.keys() and steps >= schedule["steps"]:  # overflow check 
                     break
 
 
@@ -98,4 +98,4 @@ if __name__ == "__main__":
     scheduler = Evaluator(env=env, agent=agent, logger=logger, render=render, verbose=verbose)
     
     # run now!
-    scheduler.run({"episode": 1e3})
+    scheduler.run({"episodes": 1e3})
