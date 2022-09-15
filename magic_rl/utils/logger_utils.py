@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/utils/logger_utils.py
 Date: 2022-09-13 18:26:15
-LastEditTime: 2022-09-13 18:50:41
+LastEditTime: 2022-09-15 15:58:08
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -60,6 +60,10 @@ class WandbLogger(Logger):
 
         self.run = wandb.init(project=self.project, group=self.group, job_type=self.job_type, reinit=self.reinit, **kwargs)
 
+    @property
+    def id(self):
+        return wandb.run.id
+    
     def config(self, *args):
         wandb.config.update(*args)
 
