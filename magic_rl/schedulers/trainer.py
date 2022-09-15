@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/schedulers/trainer.py
 Date: 2022-09-13 21:39:42
-LastEditTime: 2022-09-14 12:20:08
+LastEditTime: 2022-09-15 15:48:24
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -9,6 +9,7 @@ SoftWare: VSCode
 '''
 
 from typing import Dict, Union
+import os
 
 import wandb
 
@@ -23,30 +24,31 @@ class Trainer(object):
     To evaluate the performance of agent with trained model or the performance of random actions.
     '''
 
-    def __init__(self, env:gym.Env, agent, buffer, logger:Logger, render:bool=False, verbose:int=1) -> None:
+    def __init__(self, env:gym.Env, agent, buffer, logger:Logger, verbose:int=1) -> None:
         self.env = env
         self.agent = agent
         self.buffer = buffer
         self.logger = logger
-        self.render = render
         self.verbose = verbose
 
     def run(self, schedule:Dict[str, int]):
-        assert (len(schedule) == 1), f"Expect a 'dict' type variable which length is '1', but get '{len(schedule)}'!"
-        assert ("step" in schedule.keys() or "episode" in schedule.keys()), f"Illegal schedule '{schedule}' of which the key have to be one of 'episode' and 'step'."
+        assert ("steps" in schedule.keys() or "episodes" in schedule.keys()), f"Some necessary keys are missing from the schedule."
+        assert ("render" in schedule.keys()), f"Some necessary keys are missing from the schedule."
+        assert ("batch_size" in schedule.keys()), f"Some necessary keys are missing from the schedule."
+        assert ("save_model_interval" in schedule.keys()), f"Some necessary keys are missing from the schedule."
 
         steps = 0
         episodes = 0
         q_value_loss1, q_value_loss2, policy_loss, alpha_loss = 0, 0, 0, 0
 
-        while True:  # episode
+        while True:
             episode_len = 0
             episode_rew = 0
 
             obs = self.env.reset()
-            while True:  # step  # XXX limit num of steps in one episode if possable.
+            while True:   # XXX limit num of steps in one episode if possable.
                 if self.agent is not None:
-                    act = self.agent.get_action(obs, deterministic = False)  # TODO 
+                    act = self.agent.get_action(obs, deterministic = False)
                 else:
                     assert (False), f"It is illegal to train agent without specifying agent type."
                 
@@ -55,21 +57,21 @@ class Trainer(object):
                 self.buffer.push(obs, act, rew, next_obs, done)
                 obs = next_obs
                 
-                if self.render:
+                if schedule["render"]:
                     self.env.render()
                 
                 steps += 1
                 episode_len += 1
                 episode_rew += rew
 
-                if len(self.buffer) > 256:
-                    batch_buff = self.buffer.sample(256)
+                if len(self.buffer) > schedule["batch_size"]:
+                    batch_buff = self.buffer.sample(schedule["batch_size"])
                     q_value_loss1, q_value_loss2, policy_loss, alpha_loss = self.agent.update(batch_buff, reward_scale=20., auto_entropy=True, target_entropy=-4)
-                        
-                if done:
+
+                if "steps" in schedule.keys() and steps >= schedule["steps"]:  # overflow check 
                     break
 
-                if "step" in schedule.keys() and steps >= schedule["step"]:  # overflow check 
+                if done:
                     break
             
             if self.verbose > 0:
@@ -84,15 +86,20 @@ class Trainer(object):
                         "loss/q_value_loss2":q_value_loss2,
                         "loss/policy_loss":policy_loss,
                         "loss/alpha_loss":alpha_loss,
+                        "index/episodes":episodes,
+                        "index/steps":steps,
                     }
                 )
             
+            if episodes % schedule["save_model_interval"] == 0:
+                self.agent.save_model(os.path.join("./", f"checkpoints/{self.agent.id}/steps_{steps}/"))
+            
             episodes += 1
 
-            if "episode" in schedule.keys() and episodes >= schedule["episode"]:  # overflow check 
+            if "episodes" in schedule.keys() and episodes >= schedule["episodes"]:  # overflow check 
                 break
             
-            if "step" in schedule.keys() and steps >= schedule["step"]:  # overflow check 
+            if "steps" in schedule.keys() and steps >= schedule["steps"]:  # overflow check 
                     break
 
 
@@ -111,7 +118,7 @@ if __name__ == '__main__':
     agent = SacAgent(state_dim=state_dim, action_dim=action_dim, hidden_dim=256, action_range=1.0, device=torch.device("cuda:0"))
     
     from magic_rl.utils.logger_utils import WandbLogger
-    logger = WandbLogger(project="demo-project", group="exp-1", job_type="train")
+    logger = WandbLogger(project="unknown-project", group="unknown-group", job_type="train")
     
     render = False
     verbose = 1
@@ -120,4 +127,4 @@ if __name__ == '__main__':
     scheduler = Trainer(env=env, agent=agent, buffer=buffer, logger=logger, render=render, verbose=verbose)
     
     # run now!
-    scheduler.run({"episode": 1e3})
+    scheduler.run({"episodes": 1e3})
