@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/utils/logger_utils.py
 Date: 2022-09-13 18:26:15
-LastEditTime: 2022-09-16 14:36:14
+LastEditTime: 2022-09-16 20:47:07
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -126,8 +126,8 @@ class TensorboardLogger(Logger):
         if isinstance(*args, dict):
             self.config_data.update(*args)
         elif isinstance(*args, argparse.Namespace):  # TODO check if it works or not
-            for arg in vars(args):
-                self.config_data[arg] = getattr(args, arg)
+            for arg in vars(*args):
+                self.config_data[arg] = getattr(*args, arg)
         
         with open(os.path.join(self.files_dir, "config.json"), "w") as fp:
             json.dump(self.config_data, fp, indent=4)
@@ -146,10 +146,26 @@ class TensorboardLogger(Logger):
 
 if __name__ == "__main__":
     import random
-
-    # logger = WandbLogger(project="new-project", group="experiment_3", job_type="train")
-    logger = TensorboardLogger(project="new-project", group="experiment_3", job_type="train")
+    import argparse
     
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--logger",
+        type=str,
+        required=True,
+    )
+
+    args = parser.parse_args()
+
+    if "wandb" in args.logger:
+        logger = WandbLogger(project="new-project", group="experiment_3", job_type="train")
+    elif "tensorboard" in args.logger:
+        logger = TensorboardLogger(project="new-project", group="experiment_3", job_type="train")
+    else:
+        assert (False), f"The '{args.logger}' logger is not supported yet."
+
+    logger.config(args)
     logger.config({"episode":63, "batch_size": 256})
     
     for i in range(1000):
