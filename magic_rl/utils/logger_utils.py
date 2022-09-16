@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/utils/logger_utils.py
 Date: 2022-09-13 18:26:15
-LastEditTime: 2022-09-15 15:58:08
+LastEditTime: 2022-09-16 14:36:14
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -9,8 +9,16 @@ SoftWare: VSCode
 '''
 
 import abc
+from typing import Union
+import os
+import json
+import time
+import argparse
 
 import wandb
+from torch.utils.tensorboard import SummaryWriter
+
+import uuid
 
 
 class Logger(object):
@@ -74,17 +82,84 @@ class WandbLogger(Logger):
         self.run.finish()
 
 
+class TensorboardLogger(Logger):
+    '''
+    for local logging.
+    '''
+    def __init__(self, project:str, group:str, job_type:str, **kwargs) -> None:
+        self.project = project
+        self.group = group
+        self.job_type = job_type
+
+        self.id = str(uuid.uuid1()).split("-")[0]
+        self.start_timestamp = time.time()
+
+        self.run_name = f"run-{time.strftime('%Y%m%d_%H%M%S', time.localtime(self.start_timestamp))}-{self.id}"
+        self.files_dir = os.path.join("./", "tensorboard/", f"{self.run_name}/", "files/")
+        self.logs_dir = os.path.join("./", "tensorboard/", f"{self.run_name}/", "logs/")
+        self.tmp_dir = os.path.join("./", "tensorboard/", f"{self.run_name}/", "tmp/")
+
+        if not os.path.exists(self.files_dir):
+            os.makedirs(self.files_dir)
+        if not os.path.exists(self.logs_dir):
+            os.makedirs(self.logs_dir)
+        if not os.path.exists(self.tmp_dir):
+            os.makedirs(self.tmp_dir)
+
+        self.run = SummaryWriter(log_dir=self.logs_dir)
+        self.run_steps = 0
+
+        # save some information as json file
+        meta_data = {}
+        meta_data["id"] = self.id
+        meta_data["start_timestamp"] = self.start_timestamp
+        meta_data["project"] = self.project
+        meta_data["group"] = self.group
+        meta_data["job_type"] = self.job_type
+
+        with open(os.path.join(self.files_dir, "metadata.json"), "w") as fp:
+            json.dump(meta_data, fp, indent=4)
+
+        self.config_data = {}
+    
+    def config(self, *args:Union[dict, argparse.Namespace]):
+        if isinstance(*args, dict):
+            self.config_data.update(*args)
+        elif isinstance(*args, argparse.Namespace):  # TODO check if it works or not
+            for arg in vars(args):
+                self.config_data[arg] = getattr(args, arg)
+        
+        with open(os.path.join(self.files_dir, "config.json"), "w") as fp:
+            json.dump(self.config_data, fp, indent=4)
+
+    def log(self, *args:Union[dict, None]):
+        if isinstance(*args, dict):
+            for key, value in args[0].items():
+                self.run.add_scalar(key, value, self.run_steps)
+            self.run_steps += 1
+        else:
+            pass
+
+    def finish(self):
+        pass
+    
+
 if __name__ == "__main__":
     import random
-    import time
 
-    logger = WandbLogger(project="new-project", group="experiment_3", job_type="train")
-
+    # logger = WandbLogger(project="new-project", group="experiment_3", job_type="train")
+    logger = TensorboardLogger(project="new-project", group="experiment_3", job_type="train")
+    
     logger.config({"episode":63, "batch_size": 256})
-    for i in range(120):
-        logger.log({"loss/v": random.randint(0, 100)})
-        logger.log({"loss/c": random.randint(0, 100)})
-        time.sleep(0.5)
+    
+    for i in range(1000):
+        logger.log(
+            {
+                "loss/c": random.randint(0, 100),
+                "loss/v": random.randint(0, 100),
+            }
+        )
+        time.sleep(0.001)
 
     logger.finish()
         
