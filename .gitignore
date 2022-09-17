@@ -3,3 +3,4 @@ magic_rl.egg-info/*
 outputs/*
 checkpoints/*
 tensorboard/*
+**/__pycache__
