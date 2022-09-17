@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/schedulers/trainer.py
 Date: 2022-09-13 21:39:42
-LastEditTime: 2022-09-15 15:48:24
+LastEditTime: 2022-09-15 19:24:47
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -92,7 +92,7 @@ class Trainer(object):
                 )
             
             if episodes % schedule["save_model_interval"] == 0:
-                self.agent.save_model(os.path.join("./", f"checkpoints/{self.agent.id}/steps_{steps}/"))
+                self.agent.save_model(os.path.join("./", f"checkpoints/{self.logger.id}/steps_{steps}/"))
             
             episodes += 1
 
@@ -101,7 +101,6 @@ class Trainer(object):
             
             if "steps" in schedule.keys() and steps >= schedule["steps"]:  # overflow check 
                     break
-
 
 
 if __name__ == '__main__':

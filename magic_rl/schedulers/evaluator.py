@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/schedulers/evaluator.py
 Date: 2022-09-13 15:58:39
-LastEditTime: 2022-09-14 22:29:02
+LastEditTime: 2022-09-16 18:42:06
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -44,7 +44,7 @@ class Evaluator(object):
             obs = self.env.reset()
             while True:  # step  # XXX limit num of steps in one episode if possable.
                 if self.agent is not None:
-                    act = self.agent.sample_action(obs)  # TODO 
+                    act = self.agent.get_action(obs, deterministic = True)
                 else:
                     act = self.env.action_space.sample()
                 
@@ -71,6 +71,8 @@ class Evaluator(object):
                     {
                         "eval/episode_len":episode_len,
                         "eval/episode_rew":episode_rew,
+                        "index/episodes":episodes,
+                        "index/steps":steps,
                     }
                 )
             

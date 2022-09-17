@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/agents/sac_agent.py
 Date: 2022-09-06 20:02:18
-LastEditTime: 2022-09-15 14:32:21
+LastEditTime: 2022-09-16 23:08:38
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -27,7 +27,7 @@ from gym_fish.envs.t_1 import T1Env
 
 from magic_rl.buffers.buffer import ReplayBuffer
 from magic_rl.networks.network import CriticNetwork, ActorNetwork
-from magic_rl.utils.gym_utils import NormalizedActions
+from magic_rl.utils.gym_utils import NormalizeActions
 
 
 class SacAgent(object):
@@ -127,10 +127,9 @@ class SacAgent(object):
             alpha_loss = 0
 
     # Training Q Function
-        with torch.no_grad():
-            new_next_action, next_log_prob, _, _, _ = self.evaluate(next_state)
-            target_q_min = torch.min(self.target_soft_q_net1(next_state, new_next_action),self.target_soft_q_net2(next_state, new_next_action)) - self.alpha * next_log_prob
-            target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
+        new_next_action, next_log_prob, _, _, _ = self.evaluate(next_state)
+        target_q_min = torch.min(self.target_soft_q_net1(next_state, new_next_action),self.target_soft_q_net2(next_state, new_next_action)) - self.alpha * next_log_prob
+        target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
 
         q_value_loss1 = nn.MSELoss()(predicted_q_value1, target_q_value.detach())  # detach: no gradients for the variable
         q_value_loss2 = nn.MSELoss()(predicted_q_value2, target_q_value.detach())
@@ -185,9 +184,9 @@ class SacAgent(object):
 
 if __name__ == '__main__':
     # choose env
-    # env = NormalizedActions(gym.make("Pendulum-v0"))
-    # env = NormalizedActions(gym.make("LunarLanderContinuous-v2"))
-    env = NormalizedActions(T1Env(ctrl_dt=0.2, max_time=10))
+    # env = NormalizeActions(gym.make("Pendulum-v0"))
+    # env = NormalizeActions(gym.make("LunarLanderContinuous-v2"))
+    env = NormalizeActions(T1Env(ctrl_dt=0.2, max_time=10))
 
     # replay buffer
     replay_buffer = ReplayBuffer(1e6)
