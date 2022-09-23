@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/run.py
 Date: 2022-09-13 12:45:42
-LastEditTime: 2022-09-17 11:53:25
+LastEditTime: 2022-09-23 17:17:33
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -19,7 +19,7 @@ from magic_rl.agents.sac_agent import SacAgent
 from magic_rl.schedulers.trainer import Trainer
 from magic_rl.schedulers.evaluator import Evaluator
 from magic_rl.utils.logger_utils import WandbLogger
-from magic_rl.utils.gym_utils import NormalizeActions
+from magic_rl.utils.gym_utils import NormalizeActions, wrap_env
 from magic_rl.utils.others_utils import formate_args_as_table
 
 
@@ -44,16 +44,16 @@ def run_experiment(args):
         # initialize environment:
         # -----------------------
         assert (args.train_env is not None), f"Please specify the '--train-env', if you want to do training related task."
-        train_env = NormalizeActions(gym.make(args.train_env))
+        train_env = wrap_env(gym.make(args.train_env), args.env_wrappers.split(":"))
         
         # TODO automatically distinguish between discrete and continuous environments.
         observation_dim  = train_env.observation_space.shape[0]
         action_dim = train_env.action_space.shape[0]
         
         if args.eval_env is not None:
-            eval_env = NormalizeActions(gym.make(args.eval_env))
+            eval_env = wrap_env(gym.make(args.eval_env), args.env_wrappers.split(":"))
         else:
-            eval_env = NormalizeActions(gym.make(args.train_env))
+            eval_env = wrap_env(gym.make(args.train_env), args.env_wrappers.split(":"))
 
         # initialize rl agent:
         # --------------------
@@ -89,7 +89,7 @@ def run_experiment(args):
         # initialize environment:
         # -----------------------------------------
         assert (args.eval_env is not None), f"Please specify the '--eval-env', if you want to do evaluating related task."
-        eval_env = NormalizeActions(gym.make(args.eval_env))
+        eval_env = wrap_env(gym.make(args.eval_env), args.env_wrappers.split(":"))
         
         # TODO automatically distinguish between discrete and continuous environments.
         observation_dim  = eval_env.observation_space.shape[0]
@@ -125,7 +125,8 @@ def run_experiment(args):
 
     # closing for ending:
     # -------------------
-    logger.finish()
+    if logger is not None:
+        logger.finish()
 
 
 if __name__ == "__main__":
@@ -154,6 +155,13 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="The environment be selected for evaluating a rl agent.",
+    )
+
+    parser.add_argument(
+        "--env-wrappers",
+        type=str,
+        default="NormalizeActions",
+        help="Using environment wrapper, you can change environment feature easily.",
     )
 
     parser.add_argument(
@@ -200,7 +208,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--logger",
         type=str,
-        default="wandb",
+        default=None,
         help="The type of logger you want to use. ('wandb', 'tensorboard')",
     )
 

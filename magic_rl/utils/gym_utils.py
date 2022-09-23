@@ -1,13 +1,14 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/utils/gym_utils.py
 Date: 2022-09-14 14:30:18
-LastEditTime: 2022-09-17 18:42:20
+LastEditTime: 2022-09-18 17:01:14
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
 SoftWare: VSCode
 '''
 
+from typing import List
 import numpy as np
 
 import gym
@@ -103,6 +104,13 @@ class AddActionsToObservations(gym.ObservationWrapper):
         return self.observation(observation, action), reward, done, info
 
 
+def wrap_env(env: gym.Env, wrappers:List[gym.Wrapper]) -> gym.Env:
+    wrappers.reverse()
+    for wrapper in wrappers:
+        env = globals()[wrapper](env)
+    return env
+
+
 if __name__ == '__main__':
     # Original Environment
     print("Original Environment:")
@@ -129,7 +137,12 @@ if __name__ == '__main__':
     aato_so_env = SequenceObservations(AddActionsToObservations(ori_env))
     print(aato_so_env.observation_space, aato_so_env.action_space)
 
-    # exit()
+    # AddActionsToObservations + SequenceObservations
+    print("AddActionsToObservations + SequenceObservations (by 'wrap_env()'):")
+    aato_so_env = wrap_env(ori_env, ["SequenceObservations", "AddActionsToObservations"])
+    print(aato_so_env.observation_space, aato_so_env.action_space)
+
+    exit()
     env = aato_so_env
     obs = env.reset()
     
