@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/agents/sac_agent.py
 Date: 2022-09-06 20:02:18
-LastEditTime: 2022-09-16 23:08:38
+LastEditTime: 2022-09-23 16:55:42
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -23,7 +23,6 @@ import torch.nn.functional as F
 from torch.distributions import Normal
 
 import gym
-from gym_fish.envs.t_1 import T1Env
 
 from magic_rl.buffers.buffer import ReplayBuffer
 from magic_rl.networks.network import CriticNetwork, ActorNetwork
@@ -186,7 +185,7 @@ if __name__ == '__main__':
     # choose env
     # env = NormalizeActions(gym.make("Pendulum-v0"))
     # env = NormalizeActions(gym.make("LunarLanderContinuous-v2"))
-    env = NormalizeActions(T1Env(ctrl_dt=0.2, max_time=10))
+    env = NormalizeActions(gym.make("Pendulum-v0"))
 
     # replay buffer
     replay_buffer = ReplayBuffer(1e6)
