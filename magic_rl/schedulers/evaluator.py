@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/schedulers/evaluator.py
 Date: 2022-09-13 15:58:39
-LastEditTime: 2022-09-16 18:42:06
+LastEditTime: 2022-09-23 21:41:56
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -56,8 +56,10 @@ class Evaluator(object):
                 steps += 1
                 episode_len += 1
                 episode_rew += rew
-                        
+                
                 if done:
+                    self.env.save_traj(suffix=f"{episodes}".zfill(5))
+                    self.env.save_video(suffix=f"{episodes}".zfill(5))
                     break
 
                 if "steps" in schedule.keys() and steps >= schedule["steps"]:  # overflow check 
