@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/schedulers/evaluator.py
 Date: 2022-09-13 15:58:39
-LastEditTime: 2022-09-23 21:41:56
+LastEditTime: 2023-01-21 15:29:23
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -14,7 +14,7 @@ import wandb
 
 import gym
 
-# TODO from magic_rl.agents.agent import Agent
+from magic_rl.agents.agent import Agent
 from magic_rl.utils.logger_utils import Logger
 
 
@@ -23,7 +23,7 @@ class Evaluator(object):
     To evaluate the performance of agent with trained model or the performance of random actions.
     '''
 
-    def __init__(self, env:gym.Env, agent, logger:Logger, render:bool=False, verbose:int=1) -> None:
+    def __init__(self, env:gym.Env, agent:Agent, logger:Logger, render:bool=False, verbose:int=1) -> None:
         self.env = env
         self.agent = agent
         self.logger = logger
@@ -58,8 +58,6 @@ class Evaluator(object):
                 episode_rew += rew
                 
                 if done:
-                    self.env.save_traj(suffix=f"{episodes}".zfill(5))
-                    self.env.save_video(suffix=f"{episodes}".zfill(5))
                     break
 
                 if "steps" in schedule.keys() and steps >= schedule["steps"]:  # overflow check 

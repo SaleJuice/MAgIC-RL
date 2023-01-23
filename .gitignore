@@ -1,6 +1,10 @@
 wandb/*
 magic_rl.egg-info/*
 outputs/*
+outputs-eval/*
+outputs-train/*
+outputs-train-2/*
 checkpoints/*
 tensorboard/*
 **/__pycache__
+models/*

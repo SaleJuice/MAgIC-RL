@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/agents/sac_agent.py
 Date: 2022-09-06 20:02:18
-LastEditTime: 2022-09-23 16:55:42
+LastEditTime: 2023-01-23 14:45:13
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -46,6 +46,7 @@ class SacAgent(object):
         self.target_soft_q_net2 = CriticNetwork(state_dim, action_dim, hidden_dim).to(self.device)
         self.policy_net = ActorNetwork(state_dim, action_dim, hidden_dim, action_range).to(self.device)
         self.log_alpha = torch.zeros(1, dtype=torch.float32, requires_grad=True, device=self.device)
+        self.alpha = self.log_alpha.exp()
 
         for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):
             target_param.data.copy_(param.data)
@@ -92,13 +93,13 @@ class SacAgent(object):
         
         normal = Normal(0, 1)
         z      = normal.sample(mean.shape).to(self.device)
-        action = torch.tanh(mean + std*z)
+        action = torch.tanh(mean + std*z) # or using normal.rsample() for reparameterization trick (mean + std * N(0,1))
         action = torch.tanh(mean).detach().cpu().numpy()[0] if deterministic else action.detach().cpu().numpy()[0]
         
         return action
     
-    def update(self, batch_buff, reward_scale=10., auto_entropy=True, target_entropy=-2, gamma=0.99, soft_tau=0.005):  # FIXME soft_tau=1e-2
-    # Sampling from replay buffer
+    def update(self, batch_buff, auto_entropy=True, target_entropy=-2, reward_scale=5., gamma=0.99, soft_tau=0.005):
+        # Sampling from replay buffer
         state, action, reward, next_state, done = batch_buff
 
         state      = torch.FloatTensor(state).to(self.device)
@@ -107,50 +108,57 @@ class SacAgent(object):
         reward     = torch.FloatTensor(reward).unsqueeze(1).to(self.device)  # reward is single value, unsqueeze() to add one dim to be [reward] at the sample dim;
         done       = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(self.device)
 
+        # FIXME or annotate it
         # reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(dim=0) + 1e-6) # normalize with batch mean and std; plus a small number to prevent numerical problem
+
+        # Training Q Function
+        # FIXME with torch.no_grad():
+        new_next_action, next_log_prob, _, _, _ = self.evaluate(next_state)
+        target_q_min = torch.min(self.target_soft_q_net1(next_state, new_next_action), self.target_soft_q_net2(next_state, new_next_action)) - self.alpha * next_log_prob
+        target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
 
         predicted_q_value1 = self.soft_q_net1(state, action)
         predicted_q_value2 = self.soft_q_net2(state, action)
-        new_action, log_prob, _, _, _           = self.evaluate(state)
-    
-    # Updating alpha wrt entropy
-        # alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q) 
-        if auto_entropy is True:
-            alpha_loss = -(self.log_alpha * (log_prob + target_entropy).detach()).mean()
-            self.alpha_optimizer.zero_grad()
-            alpha_loss.backward()
-            self.alpha_optimizer.step()
-            self.alpha = self.log_alpha.exp()
-        else:
-            self.alpha = 1.
-            alpha_loss = 0
-
-    # Training Q Function
-        new_next_action, next_log_prob, _, _, _ = self.evaluate(next_state)
-        target_q_min = torch.min(self.target_soft_q_net1(next_state, new_next_action),self.target_soft_q_net2(next_state, new_next_action)) - self.alpha * next_log_prob
-        target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
-
         q_value_loss1 = nn.MSELoss()(predicted_q_value1, target_q_value.detach())  # detach: no gradients for the variable
         q_value_loss2 = nn.MSELoss()(predicted_q_value2, target_q_value.detach())
 
         self.soft_q_optimizer1.zero_grad()
         q_value_loss1.backward()
+        nn.utils.clip_grad_norm_(self.soft_q_net1.parameters(), 0.5)
         self.soft_q_optimizer1.step()
         
         self.soft_q_optimizer2.zero_grad()
         q_value_loss2.backward()
+        nn.utils.clip_grad_norm_(self.soft_q_net2.parameters(), 0.5)
         self.soft_q_optimizer2.step()  
 
-    # Training Policy Function
+        # Training Policy Function
+        new_action, log_prob, _, _, _ = self.evaluate(state)
         predicted_new_q_value = torch.min(self.soft_q_net1(state, new_action),self.soft_q_net2(state, new_action))
         policy_loss = (self.alpha * log_prob - predicted_new_q_value).mean()
 
         self.policy_optimizer.zero_grad()
         policy_loss.backward()
+        nn.utils.clip_grad_norm_(self.policy_net.parameters(), 0.5)
         self.policy_optimizer.step()
 
+        # Updating alpha wrt entropy
+        # alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q) 
+        if auto_entropy is True:
+            # FIXME with torch.no_grad():
+            _, log_prob, _, _, _ = self.evaluate(state)
+            alpha_loss = -(self.log_alpha * (log_prob + target_entropy).detach()).mean()
+            
+            self.alpha_optimizer.zero_grad()
+            alpha_loss.backward()
+            self.alpha_optimizer.step()
+            
+            self.alpha = self.log_alpha.exp()
+        else:
+            self.alpha = 1.
+            alpha_loss = 0
 
-    # Soft update the target value net
+        # Soft update the target value net
         for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):
             target_param.data.copy_(target_param.data * (1.0 - soft_tau) + param.data * soft_tau)
         for target_param, param in zip(self.target_soft_q_net2.parameters(), self.soft_q_net2.parameters()):

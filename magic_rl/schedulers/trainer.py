@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/schedulers/trainer.py
 Date: 2022-09-13 21:39:42
-LastEditTime: 2022-09-15 19:24:47
+LastEditTime: 2023-01-23 14:31:53
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -15,7 +15,7 @@ import wandb
 
 import gym
 
-# TODO from magic_rl.agents.agent import Agent
+from magic_rl.agents.agent import Agent
 from magic_rl.utils.logger_utils import Logger
 
 
@@ -24,7 +24,7 @@ class Trainer(object):
     To evaluate the performance of agent with trained model or the performance of random actions.
     '''
 
-    def __init__(self, env:gym.Env, agent, buffer, logger:Logger, verbose:int=1) -> None:
+    def __init__(self, env:gym.Env, agent:Agent, buffer, logger:Logger, verbose:int=1) -> None:
         self.env = env
         self.agent = agent
         self.buffer = buffer
@@ -51,22 +51,26 @@ class Trainer(object):
                     act = self.agent.get_action(obs, deterministic = False)
                 else:
                     assert (False), f"It is illegal to train agent without specifying agent type."
-                
+
+                # FIXME this is a bug for the begining of trainning
+                if len(self.buffer) <= schedule["start_steps"]:
+                    act = self.env.action_space.sample()
+
                 next_obs, rew, done, _ = self.env.step(act)
 
                 self.buffer.push(obs, act, rew, next_obs, done)
                 obs = next_obs
                 
-                if schedule["render"]:
+                if schedule["render"] and episodes % schedule["save_model_interval"] == 0:
                     self.env.render()
                 
                 steps += 1
                 episode_len += 1
                 episode_rew += rew
 
-                if len(self.buffer) > schedule["batch_size"]:
+                if len(self.buffer) > schedule["start_steps"]:
                     batch_buff = self.buffer.sample(schedule["batch_size"])
-                    q_value_loss1, q_value_loss2, policy_loss, alpha_loss = self.agent.update(batch_buff, reward_scale=20., auto_entropy=True, target_entropy=-4)
+                    q_value_loss1, q_value_loss2, policy_loss, alpha_loss = self.agent.update(batch_buff, auto_entropy=True, target_entropy=-self.env.action_space.shape[0])
 
                 if "steps" in schedule.keys() and steps >= schedule["steps"]:  # overflow check 
                     break

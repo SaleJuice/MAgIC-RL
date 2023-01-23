@@ -1,14 +1,14 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/utils/gym_utils.py
 Date: 2022-09-14 14:30:18
-LastEditTime: 2022-09-18 17:01:14
+LastEditTime: 2022-09-23 21:55:00
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
 SoftWare: VSCode
 '''
 
-from typing import List
+from typing import List, Union
 import numpy as np
 
 import gym
@@ -104,10 +104,11 @@ class AddActionsToObservations(gym.ObservationWrapper):
         return self.observation(observation, action), reward, done, info
 
 
-def wrap_env(env: gym.Env, wrappers:List[gym.Wrapper]) -> gym.Env:
-    wrappers.reverse()
-    for wrapper in wrappers:
-        env = globals()[wrapper](env)
+def wrap_env(env: gym.Env, wrappers:Union[List[gym.Wrapper], None]) -> gym.Env:
+    if wrappers is not None:
+        wrappers.reverse()
+        for wrapper in wrappers:
+            env = globals()[wrapper](env)
     return env
 
 

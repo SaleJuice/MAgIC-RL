@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/run.py
 Date: 2022-09-13 12:45:42
-LastEditTime: 2022-09-23 17:17:33
+LastEditTime: 2023-01-22 00:26:58
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -13,6 +13,7 @@ import argparse
 import torch
 
 import gym
+import pybullet_envs  # noqa
 
 from magic_rl.buffers.buffer import ReplayBuffer
 from magic_rl.agents.sac_agent import SacAgent
@@ -77,6 +78,7 @@ def run_experiment(args):
         schedule[args.experiment_length.split(":")[0]] = int(float(args.experiment_length.split(":")[1]))
         schedule["render"] = args.render
         schedule["batch_size"] = 256
+        schedule["start_steps"] = 5e3
         schedule["save_model_interval"] = 10
 
         # do some more operations if you want to 'retrain':
@@ -160,7 +162,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--env-wrappers",
         type=str,
-        default="NormalizeActions",
+        default=None,
         help="Using environment wrapper, you can change environment feature easily.",
     )
 
@@ -178,6 +180,13 @@ if __name__ == "__main__":
         type=str,
         default=1e6,
         help="The size of replay buffer for off-policy rl agent. ('10000', '1e4', '10_000')",
+    )
+
+    parser.add_argument(
+        "--start-steps",
+        type=str,
+        default=5e3,
+        help="",
     )
 
     # rl agent related:
@@ -199,7 +208,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--device",
         type=str,
-        default="cuda:0",
+        default="cpu",
         help="The device that rl algorithm run with. ('cpu', 'cuda:0')",
     )
     
