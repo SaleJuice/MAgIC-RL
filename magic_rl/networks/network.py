@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/networks/network.py
 Date: 2022-08-31 15:49:33
-LastEditTime: 2023-01-22 17:38:38
+LastEditTime: 2023-01-23 19:13:58
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -36,14 +36,15 @@ class CriticNetwork(nn.Module):
     '''
     def __init__(self, state_dims:int, action_dims:int, hidden_size, init_w=3e-3):
         super(CriticNetwork, self).__init__()
+        
+        # TODO to achieve more flexible hidden size
         # build architecture of network
-        # XXX to achieve more flexible hidden size
         self.linear1 = nn.Linear(state_dims + action_dims, hidden_size)
         self.linear2 = nn.Linear(hidden_size, hidden_size)
         self.linear3 = nn.Linear(hidden_size, 1)
 
+        # TODO to achieve more autonomy random init w&b
         # init weight and bias of network
-        # FIXME check the effect of these code
         self.linear3.weight.data.uniform_(-init_w, init_w)
         self.linear3.bias.data.uniform_(-init_w, init_w)
 
@@ -52,6 +53,7 @@ class CriticNetwork(nn.Module):
         x = F.relu(self.linear1(x))
         x = F.relu(self.linear2(x))
         x = self.linear3(x)
+        
         return x  # value of this action under this state
 
 
@@ -61,21 +63,23 @@ class ActorNetwork(nn.Module):
     '''
     def __init__(self, state_dims:int, action_dims:int, hidden_size, action_range=1., init_w=3e-3, log_std_min=-20, log_std_max=2):
         super(ActorNetwork, self).__init__()
+        
+        # TODO to achieve more flexible hidden size
         # build architecture of network
-        # XXX to achieve more flexible hidden size
         self.linear1 = nn.Linear(state_dims, hidden_size)
         self.linear2 = nn.Linear(hidden_size, hidden_size)
         self.linear_mean = nn.Linear(hidden_size, action_dims)
         self.linear_log_std = nn.Linear(hidden_size, action_dims)
         
+        # TODO to achieve more autonomy random init w&b
         # init weight and bias of network
-        # FIXME to check the effect of these code
         self.linear_mean.weight.data.uniform_(-init_w, init_w)
         self.linear_mean.bias.data.uniform_(-init_w, init_w)
 
         self.linear_log_std.weight.data.uniform_(-init_w, init_w)
         self.linear_log_std.bias.data.uniform_(-init_w, init_w)
 
+        # varibales
         self.log_std_min = log_std_min
         self.log_std_max = log_std_max
 
@@ -86,7 +90,6 @@ class ActorNetwork(nn.Module):
         x = F.relu(self.linear1(state))
         x = F.relu(self.linear2(x))
 
-        # TODO to check the effect of using 'mean = F.leaky_relu(self.mean_linear(x))'
         mean = F.leaky_relu(self.linear_mean(x))
         log_std = F.leaky_relu(self.linear_log_std(x))
         log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
