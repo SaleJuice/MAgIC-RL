@@ -1,7 +1,7 @@
 '''
-FilePath: /MAgIC-RL/network.py
+FilePath: /MAgIC-RL/magic_rl/networks/network.py
 Date: 2022-08-31 15:49:33
-LastEditTime: 2022-09-11 11:48:57
+LastEditTime: 2023-01-22 17:38:38
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -10,6 +10,7 @@ SoftWare: VSCode
 
 import os
 
+import math
 import numpy as np
 
 import torch
@@ -17,6 +18,13 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Normal
+
+
+def reset_parameters(linear:nn.Linear):
+    stdv = 1. / math.sqrt(linear.weight.size(1))
+    linear.weight.data.uniform_(-stdv, stdv)
+    if linear.bias is not None:
+        linear.bias.data.uniform_(-stdv, stdv)
 
 
 # network models used by SAC-v2 algorithm:
@@ -32,20 +40,18 @@ class CriticNetwork(nn.Module):
         # XXX to achieve more flexible hidden size
         self.linear1 = nn.Linear(state_dims + action_dims, hidden_size)
         self.linear2 = nn.Linear(hidden_size, hidden_size)
-        self.linear3 = nn.Linear(hidden_size, hidden_size)
-        self.linear4 = nn.Linear(hidden_size, 1)
+        self.linear3 = nn.Linear(hidden_size, 1)
 
         # init weight and bias of network
         # FIXME check the effect of these code
-        self.linear4.weight.data.uniform_(-init_w, init_w)
-        self.linear4.bias.data.uniform_(-init_w, init_w)
+        self.linear3.weight.data.uniform_(-init_w, init_w)
+        self.linear3.bias.data.uniform_(-init_w, init_w)
 
     def forward(self, state, action):
         x = torch.cat([state, action], 1)  # the dim 0 is number of batch, which means state.shape[0] == action.shape[0].
         x = F.relu(self.linear1(x))
         x = F.relu(self.linear2(x))
-        x = F.relu(self.linear3(x))
-        x = self.linear4(x)
+        x = self.linear3(x)
         return x  # value of this action under this state
 
 
@@ -59,16 +65,14 @@ class ActorNetwork(nn.Module):
         # XXX to achieve more flexible hidden size
         self.linear1 = nn.Linear(state_dims, hidden_size)
         self.linear2 = nn.Linear(hidden_size, hidden_size)
-        self.linear3 = nn.Linear(hidden_size, hidden_size)
-        self.linear4 = nn.Linear(hidden_size, hidden_size)
+        self.linear_mean = nn.Linear(hidden_size, action_dims)
+        self.linear_log_std = nn.Linear(hidden_size, action_dims)
         
         # init weight and bias of network
         # FIXME to check the effect of these code
-        self.linear_mean = nn.Linear(hidden_size, action_dims)
         self.linear_mean.weight.data.uniform_(-init_w, init_w)
         self.linear_mean.bias.data.uniform_(-init_w, init_w)
 
-        self.linear_log_std = nn.Linear(hidden_size, action_dims)
         self.linear_log_std.weight.data.uniform_(-init_w, init_w)
         self.linear_log_std.bias.data.uniform_(-init_w, init_w)
 
@@ -81,12 +85,10 @@ class ActorNetwork(nn.Module):
     def forward(self, state):
         x = F.relu(self.linear1(state))
         x = F.relu(self.linear2(x))
-        x = F.relu(self.linear3(x))
-        x = F.relu(self.linear4(x))
 
         # TODO to check the effect of using 'mean = F.leaky_relu(self.mean_linear(x))'
-        mean = self.linear_mean(x)
-        log_std = self.linear_log_std(x)
+        mean = F.leaky_relu(self.linear_mean(x))
+        log_std = F.leaky_relu(self.linear_log_std(x))
         log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
 
         return mean, log_std  # mean and log(std) of the action under this state
