@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/utils/logger_utils.py
 Date: 2022-09-13 18:26:15
-LastEditTime: 2022-09-16 20:47:07
+LastEditTime: 2023-10-24 14:57:10
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -150,11 +150,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "--logger",
-        type=str,
-        required=True,
-    )
+    parser.add_argument("--logger", type=str, default="wandb", choices=["tensorboard", "wandb"])
 
     args = parser.parse_args()
 
