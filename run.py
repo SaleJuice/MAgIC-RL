@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/run.py
 Date: 2022-09-13 12:45:42
-LastEditTime: 2023-10-24 15:51:12
+LastEditTime: 2023-10-26 21:08:43
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -29,22 +29,23 @@ def parse_args():
 
     # job type related:
     # -----------------
-    parser.add_argument("--job-type", type=str, default="train", choices=['train', 'eval', 'retrain'],
+    parser.add_argument("--job-type", type=str, default="eval", choices=['train', 'eval', 'retrain'],
                         help="")
     
     # environment related:
     # --------------------
-    parser.add_argument("--train-env", type=str, default="Pendulum-v0", 
+    parser.add_argument("--train-env", type=str, default="gym_fish:Sim2Real-v0", choices=['gym_fish:Sim2Real-v0', 'LunarLanderContinuous-v2', 'Pendulum-v0'],
                         help="The environment be selected for training a rl agent.")
 
-    parser.add_argument("--eval-env", type=str, default="Pendulum-v0", 
+    parser.add_argument("--eval-env", type=str, default="gym_fish:Sim2Real-v0",  choices=['gym_fish:Sim2Real-v0', 'LunarLanderContinuous-v2', 'Pendulum-v0'],
                         help="The environment be selected for evaluating a rl agent.")
     
     parser.add_argument("--render", type=bool, default=False, choices=['True', 'False'],
                         help="Whether to render the environment.")
 
-    parser.add_argument("--env-wrappers", type=str, default="NormalizeActions", 
-                        help="Using environment wrapper, you can change environment feature easily.")
+    # FIXME abandoned
+    # parser.add_argument("--env-wrappers", type=str, default="NormalizeActions", 
+    #                     help="Using environment wrapper, you can change environment feature easily.")
     
     # replay buffer related:
     # ----------------------
@@ -59,7 +60,7 @@ def parse_args():
     parser.add_argument("--agent", type=str, default="sac_agent", choices=['sac_agent'],
                         help="The rl agent (not specified means random action) for training or evaluating in enviroments.")
 
-    parser.add_argument("--wb-dir", type=str, default=None, 
+    parser.add_argument("--wb-dir", type=str, default="./checkpoints/8e588b5e/steps_7414", 
                         help="If you want to evaluate or retrain a agent with exist weight and bias.")
 
     parser.add_argument("--device", type=str, default="cpu", choices=['cpu', 'cuda'],
@@ -104,16 +105,19 @@ def run_experiment(args):
     if "train" in args.job_type:
         # initialize environment:
         assert (args.train_env is not None), f"Please specify the '--train-env', if you want to do training related task."
-        train_env = wrap_env(gym.make(args.train_env), args.env_wrappers.split(":"))
+        
+        # FIXME delete the wrapper function or make it more useful.
+        # train_env = wrap_env(gym.make(args.train_env), args.env_wrappers.split(":"))
+        train_env = gym.make(args.train_env)
         
         # TODO automatically distinguish between discrete and continuous environments.
         observation_dim  = train_env.observation_space.shape[0]
         action_dim = train_env.action_space.shape[0]
         
         if args.eval_env is not None:
-            eval_env = wrap_env(gym.make(args.eval_env), args.env_wrappers.split(":"))
+            eval_env = gym.make(args.eval_env)
         else:
-            eval_env = wrap_env(gym.make(args.train_env), args.env_wrappers.split(":"))
+            eval_env = gym.make(args.train_env)
 
         # initialize rl agent:
         assert (args.agent is not None), f"Please specify the '--agent', if you want to train the rl agent."
@@ -143,7 +147,7 @@ def run_experiment(args):
     elif "eval" in args.job_type:
         # initialize environment:
         assert (args.eval_env is not None), f"Please specify the '--eval-env', if you want to do evaluating related task."
-        eval_env = wrap_env(gym.make(args.eval_env), args.env_wrappers.split(":"))
+        eval_env = gym.make(args.eval_env)
         
         # TODO automatically distinguish between discrete and continuous environments.
         observation_dim  = eval_env.observation_space.shape[0]

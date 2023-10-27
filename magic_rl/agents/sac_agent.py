@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/magic_rl/agents/sac_agent.py
 Date: 2022-09-06 20:02:18
-LastEditTime: 2023-01-23 14:45:13
+LastEditTime: 2023-10-26 19:25:35
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -167,7 +167,8 @@ class SacAgent(object):
         return q_value_loss1, q_value_loss2, policy_loss, alpha_loss
 
     def save_model(self, wb_dir):
-        if not os.path.exists(wb_dir): os.makedirs(wb_dir)
+        if not os.path.exists(wb_dir): 
+            os.makedirs(wb_dir)
         torch.save(self.soft_q_net1.state_dict(), os.path.join(wb_dir, "q1.pth"))
         torch.save(self.soft_q_net2.state_dict(), os.path.join(wb_dir, "q2.pth"))
         torch.save(self.policy_net.state_dict(), os.path.join(wb_dir, "policy.pth"))
