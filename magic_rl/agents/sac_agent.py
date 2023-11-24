@@ -24,12 +24,13 @@ from torch.distributions import Normal
 
 import gym
 
+from magic_rl.agents.agent import Agent
 from magic_rl.buffers.buffer import ReplayBuffer
 from magic_rl.networks.network import CriticNetwork, ActorNetwork
 from magic_rl.utils.gym_utils import NormalizeActions
 
 
-class SacAgent(object):
+class SacAgent(Agent):
     '''
     Soft Actor-Critic version 2
     using target Q instead of V net: 2 Q net, 2 target Q net, 1 policy net
@@ -100,13 +101,14 @@ class SacAgent(object):
     
     def update(self, batch_buff, auto_entropy=True, target_entropy=-2, reward_scale=5., gamma=0.99, soft_tau=0.005):
         # Sampling from replay buffer
-        state, action, reward, next_state, done = batch_buff
+        state, action, reward, next_state, terminated, truncated = batch_buff
 
         state      = torch.FloatTensor(state).to(self.device)
         next_state = torch.FloatTensor(next_state).to(self.device)
         action     = torch.FloatTensor(action).to(self.device)
         reward     = torch.FloatTensor(reward).unsqueeze(1).to(self.device)  # reward is single value, unsqueeze() to add one dim to be [reward] at the sample dim;
-        done       = torch.FloatTensor(np.float32(done)).unsqueeze(1).to(self.device)
+        terminated = torch.FloatTensor(np.float32(terminated)).unsqueeze(1).to(self.device)
+        truncated  = torch.FloatTensor(np.float32(truncated)).unsqueeze(1).to(self.device)
 
         # FIXME or annotate it
         # reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(dim=0) + 1e-6) # normalize with batch mean and std; plus a small number to prevent numerical problem
@@ -115,7 +117,7 @@ class SacAgent(object):
         # FIXME with torch.no_grad():
         new_next_action, next_log_prob, _, _, _ = self.evaluate(next_state)
         target_q_min = torch.min(self.target_soft_q_net1(next_state, new_next_action), self.target_soft_q_net2(next_state, new_next_action)) - self.alpha * next_log_prob
-        target_q_value = reward + (1 - done) * gamma * target_q_min # if done==1, only reward
+        target_q_value = reward + (1 - terminated) * gamma * target_q_min # if done == 1, only reward
 
         predicted_q_value1 = self.soft_q_net1(state, action)
         predicted_q_value2 = self.soft_q_net2(state, action)

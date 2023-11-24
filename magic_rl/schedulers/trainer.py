@@ -24,7 +24,7 @@ class Trainer(object):
     To evaluate the performance of agent with trained model or the performance of random actions.
     '''
 
-    def __init__(self, env:gym.Env, agent:Agent, buffer, logger:Logger, verbose:int=1) -> None:
+    def __init__(self, env:gym.Env, agent:Union[Agent, None], buffer, logger:Union[Logger, None], verbose:int=1) -> None:
         self.env = env
         self.agent = agent
         self.buffer = buffer
@@ -45,7 +45,7 @@ class Trainer(object):
             episode_len = 0
             episode_rew = 0
 
-            obs = self.env.reset()
+            obs, _ = self.env.reset()
             while True:   # XXX limit num of steps in one episode if possable.
                 if self.agent is not None:
                     act = self.agent.get_action(obs, deterministic = False)
@@ -56,9 +56,9 @@ class Trainer(object):
                 if len(self.buffer) <= schedule["start_steps"]:
                     act = self.env.action_space.sample()
 
-                next_obs, rew, done, _ = self.env.step(act)
+                next_obs, rew, terminated, truncated, _ = self.env.step(act)
 
-                self.buffer.push(obs, act, rew, next_obs, done)
+                self.buffer.push(obs, act, rew, next_obs, terminated, truncated)
                 obs = next_obs
                 
                 if schedule["render"] and episodes % schedule["save_model_interval"] == 0:
@@ -75,7 +75,7 @@ class Trainer(object):
                 if "steps" in schedule.keys() and steps >= schedule["steps"]:  # overflow check 
                     break
 
-                if done:
+                if terminated or truncated:
                     break
             
             if self.verbose > 0:

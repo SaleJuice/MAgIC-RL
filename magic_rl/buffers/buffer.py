@@ -11,7 +11,7 @@ SoftWare: VSCode
 import random
 import numpy as np
 
-import gym
+import magic_gym
 
 
 class ReplayBuffer:
@@ -20,22 +20,22 @@ class ReplayBuffer:
         self.buffer = []
         self.position = 0
 
-    def push(self, obs, action, reward, next_obs, done):
+    def push(self, obs, action, reward, next_obs, terminated, truncated):
         if len(self.buffer) < self.capacity:
             self.buffer.append(None)
-        self.buffer[self.position] = (obs, action, reward, next_obs, done)
+        self.buffer[self.position] = (obs, action, reward, next_obs, terminated, truncated)
         self.position = int((self.position + 1) % self.capacity)  # as a ring buffer
 
     def sample(self, batch_size):
         batch = random.sample(self.buffer, batch_size)
-        obs, action, reward, next_obs, done = map(np.stack, zip(*batch))  # stack for each element
+        obs, action, reward, next_obs, terminated, truncated = map(np.stack, zip(*batch))  # stack for each element
         ''' 
         the * serves as unpack: sum(a,b) <=> batch=(a,b), sum(*batch) ;
         zip: a=[1,2], b=[2,3], zip(a,b) => [(1, 2), (2, 3)] ;
         the map serves as mapping the function on each list element: map(square, [2,3]) => [4,9] ;
         np.stack((1,2)) => array([1, 2])
         '''
-        return obs, action, reward, next_obs, done
+        return obs, action, reward, next_obs, terminated, truncated
 
     def __len__(self):
         return len(self.buffer)

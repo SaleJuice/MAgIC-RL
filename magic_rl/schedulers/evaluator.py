@@ -23,7 +23,7 @@ class Evaluator(object):
     To evaluate the performance of agent with trained model or the performance of random actions.
     '''
 
-    def __init__(self, env:gym.Env, agent:Agent, logger:Logger, render:bool=False, verbose:int=1) -> None:
+    def __init__(self, env:gym.Env, agent:Union[Agent, None], logger:Union[Logger, None], render:bool=False, verbose:int=1) -> None:
         self.env = env
         self.agent = agent
         self.logger = logger

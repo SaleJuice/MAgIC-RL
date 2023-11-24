@@ -1,7 +1,7 @@
 '''
 FilePath: /MAgIC-RL/run.py
 Date: 2022-09-13 12:45:42
-LastEditTime: 2023-10-26 21:08:43
+LastEditTime: 2023-11-09 19:06:37
 Author: Xiaozhu Lin
 E-Mail: linxzh@shanghaitech.edu.cn
 Institution: MAgIC Lab, ShanghaiTech University, China
@@ -29,15 +29,15 @@ def parse_args():
 
     # job type related:
     # -----------------
-    parser.add_argument("--job-type", type=str, default="eval", choices=['train', 'eval', 'retrain'],
+    parser.add_argument("--job-type", type=str, default="train", choices=['train', 'eval', 'retrain'],
                         help="")
     
     # environment related:
     # --------------------
-    parser.add_argument("--train-env", type=str, default="gym_fish:Sim2Real-v0", choices=['gym_fish:Sim2Real-v0', 'LunarLanderContinuous-v2', 'Pendulum-v0'],
+    parser.add_argument("--train-env", type=str, default="Pendulum-v0", choices=['gym_fish:PositionControlTrainingEnv-v0', 'gym_fish:ApproachingTargetAndStay-v0', 'gym_fish:Sim2Real-v0', 'LunarLanderContinuous-v2', 'Pendulum-v0'],
                         help="The environment be selected for training a rl agent.")
 
-    parser.add_argument("--eval-env", type=str, default="gym_fish:Sim2Real-v0",  choices=['gym_fish:Sim2Real-v0', 'LunarLanderContinuous-v2', 'Pendulum-v0'],
+    parser.add_argument("--eval-env", type=str, default="Pendulum-v0",  choices=['gym_fish:PositionControlEvaluationEnv-v0', 'gym_fish:ApproachingTargetAndStay-v0', 'gym_fish:Sim2Real-v0', 'LunarLanderContinuous-v2', 'Pendulum-v0'],
                         help="The environment be selected for evaluating a rl agent.")
     
     parser.add_argument("--render", type=bool, default=False, choices=['True', 'False'],
@@ -52,7 +52,7 @@ def parse_args():
     parser.add_argument("--buffer-size", type=str, default=1e6, 
                         help="The size of replay buffer for off-policy rl agent.")
 
-    parser.add_argument("--start-steps", type=str, default=5e3, 
+    parser.add_argument("--start-steps", type=str, default=3e3, 
                         help="")
 
     # rl agent related:
@@ -71,10 +71,10 @@ def parse_args():
     parser.add_argument("--logger", type=str, default="tensorboard", choices=['tensorboard', 'wandb'],
                         help="The type of logger you want to use.")
 
-    parser.add_argument("--project-name", type=str, default="demo-project", 
+    parser.add_argument("--project-name", type=str, default="MF-PositionControl", 
                         help="The project name for logger to classify different runs.")
 
-    parser.add_argument("--group-name", type=str, default="demo-group", 
+    parser.add_argument("--group-name", type=str, default="Type4-NoFlowRandomization", 
                         help="The group name for logger to classify different runs.")
 
     parser.add_argument("--verbose", type=int, default=1, choices=[0, 1, 2],
