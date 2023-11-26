@@ -22,7 +22,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Normal
 
-import gym
+import gymnasium as gym
 
 from magic_rl.buffers.buffer import ReplayBuffer
 from magic_rl.networks.network import CriticNetwork, ActorNetwork

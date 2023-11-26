@@ -13,7 +13,7 @@ import os
 
 import wandb
 
-import gym
+import gymnasium as gym
 
 from magic_rl.agents.agent import Agent
 from magic_rl.utils.logger_utils import Logger

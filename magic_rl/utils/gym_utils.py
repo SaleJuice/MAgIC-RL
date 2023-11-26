@@ -11,8 +11,8 @@ SoftWare: VSCode
 from typing import List, Union
 import numpy as np
 
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 
 
 class NormalizeActions(gym.ActionWrapper):

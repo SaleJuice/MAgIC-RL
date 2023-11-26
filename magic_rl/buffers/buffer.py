@@ -11,8 +11,6 @@ SoftWare: VSCode
 import random
 import numpy as np
 
-import magic_gym
-
 
 class ReplayBuffer:
     def __init__(self, capacity):

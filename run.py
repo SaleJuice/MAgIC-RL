@@ -12,7 +12,7 @@ import argparse
 
 import torch
 
-import gym
+import gymnasium as gym
 # import pybullet_envs  # noqa
 
 from magic_rl.buffers.buffer import ReplayBuffer
@@ -34,10 +34,10 @@ def parse_args():
     
     # environment related:
     # --------------------
-    parser.add_argument("--train-env", type=str, default="Pendulum-v0", choices=['gym_fish:PositionControlTrainingEnv-v0', 'gym_fish:ApproachingTargetAndStay-v0', 'gym_fish:Sim2Real-v0', 'LunarLanderContinuous-v2', 'Pendulum-v0'],
+    parser.add_argument("--train-env", type=str, default="Pendulum-v1", choices=['LunarLanderContinuous-v2', 'Pendulum-v1'],
                         help="The environment be selected for training a rl agent.")
 
-    parser.add_argument("--eval-env", type=str, default="Pendulum-v0",  choices=['gym_fish:PositionControlEvaluationEnv-v0', 'gym_fish:ApproachingTargetAndStay-v0', 'gym_fish:Sim2Real-v0', 'LunarLanderContinuous-v2', 'Pendulum-v0'],
+    parser.add_argument("--eval-env", type=str, default="Pendulum-v1",  choices=['LunarLanderContinuous-v2', 'Pendulum-v1'],
                         help="The environment be selected for evaluating a rl agent.")
     
     parser.add_argument("--render", type=bool, default=False, choices=['True', 'False'],
@@ -52,7 +52,7 @@ def parse_args():
     parser.add_argument("--buffer-size", type=str, default=1e6, 
                         help="The size of replay buffer for off-policy rl agent.")
 
-    parser.add_argument("--start-steps", type=str, default=3e3, 
+    parser.add_argument("--start-steps", type=str, default=5e3, 
                         help="")
 
     # rl agent related:
@@ -60,7 +60,7 @@ def parse_args():
     parser.add_argument("--agent", type=str, default="sac_agent", choices=['sac_agent'],
                         help="The rl agent (not specified means random action) for training or evaluating in enviroments.")
 
-    parser.add_argument("--wb-dir", type=str, default="./checkpoints/8e588b5e/steps_7414", 
+    parser.add_argument("--wb-dir", type=str, default="", 
                         help="If you want to evaluate or retrain a agent with exist weight and bias.")
 
     parser.add_argument("--device", type=str, default="cpu", choices=['cpu', 'cuda'],
@@ -71,10 +71,10 @@ def parse_args():
     parser.add_argument("--logger", type=str, default="tensorboard", choices=['tensorboard', 'wandb'],
                         help="The type of logger you want to use.")
 
-    parser.add_argument("--project-name", type=str, default="MF-PositionControl", 
+    parser.add_argument("--project-name", type=str, default="Gym-Robotics", 
                         help="The project name for logger to classify different runs.")
 
-    parser.add_argument("--group-name", type=str, default="Type4-NoFlowRandomization", 
+    parser.add_argument("--group-name", type=str, default="Pendulum-v1", 
                         help="The group name for logger to classify different runs.")
 
     parser.add_argument("--verbose", type=int, default=1, choices=[0, 1, 2],
@@ -82,7 +82,7 @@ def parse_args():
 
     # scheduler related:
     # ------------------
-    parser.add_argument("--experiment-length", type=str, default="episodes:1e3", 
+    parser.add_argument("--experiment-length", type=str, default="steps:1e5", 
                         help="The length of experiment for training or evaluating. ('episodes:1e3', 'steps:1e6')")
     
     return parser.parse_args()
