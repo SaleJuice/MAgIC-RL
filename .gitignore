@@ -1,5 +1,6 @@
-wandb/*
-magic_rl.egg-info/*
-checkpoints/*
-tensorboard/*
 **/__pycache__
+checkpoints/**
+magic_rl.egg-info/**
+outputs/**
+tensorboard/**
+wandb/**
