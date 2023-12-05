@@ -1,13 +1,3 @@
-'''
-FilePath: /MAgIC-RL/magic_rl/schedulers/trainer.py
-Date: 2022-09-13 21:39:42
-LastEditTime: 2023-01-23 14:31:53
-Author: Xiaozhu Lin
-E-Mail: linxzh@shanghaitech.edu.cn
-Institution: MAgIC Lab, ShanghaiTech University, China
-SoftWare: VSCode
-'''
-
 from typing import Dict, Union
 import os
 

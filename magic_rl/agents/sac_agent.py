@@ -1,13 +1,3 @@
-'''
-FilePath: /MAgIC-RL/magic_rl/agents/sac_agent.py
-Date: 2022-09-06 20:02:18
-LastEditTime: 2023-10-26 19:25:35
-Author: Xiaozhu Lin
-E-Mail: linxzh@shanghaitech.edu.cn
-Institution: MAgIC Lab, ShanghaiTech University, China
-SoftWare: VSCode
-'''
-
 import os
 import time
 import math

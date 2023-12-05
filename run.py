@@ -1,19 +1,8 @@
-'''
-FilePath: /MAgIC-RL/run.py
-Date: 2022-09-13 12:45:42
-LastEditTime: 2023-11-09 19:06:37
-Author: Xiaozhu Lin
-E-Mail: linxzh@shanghaitech.edu.cn
-Institution: MAgIC Lab, ShanghaiTech University, China
-SoftWare: VSCode
-'''
-
 import argparse
 
 import torch
 
 import gymnasium as gym
-# import pybullet_envs  # noqa
 
 from magic_rl.buffers.buffer import ReplayBuffer
 from magic_rl.agents.sac_agent import SacAgent
@@ -63,7 +52,7 @@ def parse_args():
     parser.add_argument("--wb-dir", type=str, default="", 
                         help="If you want to evaluate or retrain a agent with exist weight and bias.")
 
-    parser.add_argument("--device", type=str, default="cpu", choices=['cpu', 'cuda'],
+    parser.add_argument("--device", type=str, default="cuda", choices=['cpu', 'cuda'],
                         help="The device that rl algorithm run with.")
     
     # logger related:
@@ -120,9 +109,11 @@ def run_experiment(args):
             eval_env = gym.make(args.train_env)
 
         # initialize rl agent:
+        device = torch.device(args.device)
+
         assert (args.agent is not None), f"Please specify the '--agent', if you want to train the rl agent."
         if "sac_agent" in args.agent:
-            agent = SacAgent(state_dim=observation_dim, action_dim=action_dim, hidden_dim=256, action_range=1.0, device=torch.device(args.device))
+            agent = SacAgent(state_dim=observation_dim, action_dim=action_dim, hidden_dim=256, action_range=1.0, device=device)
         else:
             assert (False), f"Do not support this '{args.agent}' agent yet, please choose another agent!"
 
