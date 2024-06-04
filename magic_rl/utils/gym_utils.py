@@ -1,13 +1,3 @@
-'''
-FilePath: /MAgIC-RL/magic_rl/utils/gym_utils.py
-Date: 2022-09-14 14:30:18
-LastEditTime: 2022-09-23 21:55:00
-Author: Xiaozhu Lin
-E-Mail: linxzh@shanghaitech.edu.cn
-Institution: MAgIC Lab, ShanghaiTech University, China
-SoftWare: VSCode
-'''
-
 from typing import List, Union
 import numpy as np
 

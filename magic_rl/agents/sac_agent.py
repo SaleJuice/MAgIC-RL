@@ -1,10 +1,8 @@
-import os, uuid, random
+import os
 import numpy as np
 
 import torch
 from torch.distributions import Normal
-
-import gymnasium as gym
 
 from magic_rl.networks import ContinuousActionValueNetwork, ContinuousPolicyNetwork
 
@@ -13,7 +11,7 @@ class SacAgent(object):
     '''Soft Actor-Critic (SAC-v2) algorithm for continuous action space | https://arxiv.org/abs/1812.05905
     '''
 
-    def __init__(self, obs_dims:int, act_dims:int, hidden_dims:list, gamma=0.99, tau=0.005, q_lr=3e-4, pi_lr=3e-4, a_lr=3e-4, auto_entropy=True, device:str='cpu', **kwargs):
+    def __init__(self, obs_dims:int, act_dims:int, hidden_dims:list, gamma=0.99, tau=0.005, q_lr=3e-4, pi_lr=3e-4, a_lr=3e-4, auto_entropy=True, device:str='cpu', **kwargs) -> None:
         self.gamma = gamma
         self.tau = tau
         self.auto_entropy = auto_entropy
@@ -43,27 +41,27 @@ class SacAgent(object):
             param_.data.copy_(param.data)
 
     @property
-    def name(self):
+    def name(self) -> str:
         return 'SAC'
 
-    def set_train(self):
+    def set_train(self) -> None:
         self.q_1_net.train()
         self.q_2_net.train()
         self.pi_net.train()
 
-    def set_eval(self):
+    def set_eval(self) -> None:
         self.q_1_net.eval()
         self.q_2_net.eval()
         self.pi_net.eval()
 
-    def save_model(self, dir):
+    def save_model(self, dir) -> None:
         if not os.path.exists(dir): 
             os.makedirs(dir)
         torch.save(self.q_1_net.state_dict(), os.path.join(dir, "q_1.pth"))
         torch.save(self.q_2_net.state_dict(), os.path.join(dir, "q_2.pth"))
         torch.save(self.pi_net.state_dict(), os.path.join(dir, "pi.pth"))
 
-    def load_model(self, dir):
+    def load_model(self, dir) -> None:
         assert os.path.exists(dir), f"Directory '{dir}' of weights and biases is NOT exist."
         self.q_1_net.load_state_dict(torch.load(os.path.join(dir, "q_1.pth")))
         self.q_2_net.load_state_dict(torch.load(os.path.join(dir, "q_2.pth")))
@@ -94,7 +92,7 @@ class SacAgent(object):
         log_prob = log_prob.sum(dim=1, keepdim=True)
         return act, log_prob
     
-    def update(self, batch_buff):
+    def update(self, batch_buff) -> dict:
         self.set_train()
 
         obs, act, rew, next_obs, ter, tru = batch_buff
@@ -159,25 +157,34 @@ class SacAgent(object):
 
 if __name__ == '__main__':
     # hyper-params
+    env_name = ['Pendulum-v1'][0]
+
     max_steps = 1e6
+    buffer_size = 1e6
     batch_size = 256
+    model_save_interval = 100
     average_range = 50
+    return_threshold = np.inf
 
     # env
-    env_name = ['Pendulum-v1', 'LunarLanderContinuous-v2'][1]
-    env = gym.make(env_name)
+    import gymnasium as gym
+    from magic_rl.utils.gym_utils import NormalizeActions
+    env = NormalizeActions(gym.make(env_name))  # because the output action range of 'sac_agent' is (-1, 1)
+    print(f"env_name: '{env_name}' | obs_dims: {env.observation_space.shape[0]} | act_dims: {env.action_space.shape[0]}")
 
     # buffer
     from magic_rl.buffers import ReplayBuffer
-    buffer = ReplayBuffer(1e6)
+    buffer = ReplayBuffer(buffer_size)
 
     # agent
     assert isinstance(env.action_space, gym.spaces.Box), "Only support CONTINUOUS action space yet."
-    agent = SacAgent(env.observation_space.shape[0], env.action_space.shape[0], hidden_dims=[256, 256], gamma=0.99, tau=0.005, q_lr=3e-4, pi_lr=3e-4, a_lr=3e-4, device='cuda')
-
+    agent = SacAgent(env.observation_space.shape[0], env.action_space.shape[0], hidden_dims=[256, 256], gamma=0.99, tau=0.005, q_lr=3e-4, pi_lr=3e-4, a_lr=3e-4, auto_entropy=True, device='cpu')
+    
     # logger
-    from torch.utils.tensorboard import SummaryWriter
+    import uuid
     uid = str(uuid.uuid1()).split('-')[0]
+    
+    from torch.utils.tensorboard import SummaryWriter
     logger = SummaryWriter(log_dir=f"./tensorboard/{env_name}/{agent.name}/{uid}")
 
     # training
@@ -187,6 +194,9 @@ if __name__ == '__main__':
         episode_len = 0
 
         obs, _ = env.reset()
+        
+        import time
+        start_timestamp = time.perf_counter()
         while True:  # one rollout
             act = agent.get_action(obs, deterministic=False)
             next_obs, rew, ter, tru, _ = env.step(act)
@@ -198,6 +208,7 @@ if __name__ == '__main__':
             episode_len += 1
             episode_rew += rew
             
+            # policy update  <<<
             if len(buffer) > batch_size:
                 loss_log = agent.update(buffer.sample(batch_size))
                 for key, value in loss_log.items():
@@ -212,9 +223,21 @@ if __name__ == '__main__':
         average_return = np.array(returns).mean() if len(returns) <= average_range else np.array(returns[-(average_range+1):-1]).mean()
 
         # verbose
-        print(f"UID: {uid} | Steps: {steps} | Episodes: {episodes} | Episode Length: {episode_len} | Episode Reward: {episode_rew} | Average Return: {average_return}")
+        np.set_printoptions(precision=3, suppress=True, floatmode='fixed', linewidth=150)
+        print(f"UID: {uid} | Steps: {steps} | Episodes: {episodes} | Length: {episode_len} | Reward: {round(episode_rew, 3)} | Average Return: {round(average_return, 3)} | Costed Real Time: {round(time.perf_counter() - start_timestamp, 3)}")
         
         # logging
         logger.add_scalar('episodic/return', episode_rew, steps)
         logger.add_scalar('episodic/length', episode_len, steps)
         logger.add_scalar('episodic/return(average)', average_return, steps)
+        logger.add_scalar('episode_nums', episodes, steps)
+
+        # save model
+        agent.save_model(f"{logger.get_logdir()}/ckpts/latest/")
+
+        if episodes % model_save_interval == 0 or (len(returns) > average_return and average_return >= return_threshold):
+            agent.save_model(f"{logger.get_logdir()}/ckpts/{episodes}/")
+        
+        if len(returns) > average_return and average_return >= return_threshold:
+            print(f"Training SUCCESSFUL!")
+            break

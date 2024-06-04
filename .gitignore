@@ -1,2 +1,3 @@
 **/__pycache__
 magic_rl.egg-info/**
+tensorboard/**
