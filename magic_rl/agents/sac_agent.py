@@ -1,243 +1,220 @@
-import os
-import time
-import math
-import random
-
+import os, uuid, random
 import numpy as np
-import matplotlib.pyplot as plt
 
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
 from torch.distributions import Normal
 
 import gymnasium as gym
 
-from magic_rl.agents.agent import Agent
-from magic_rl.buffers.buffer import ReplayBuffer
-from magic_rl.networks.network import CriticNetwork, ActorNetwork
-from magic_rl.utils.gym_utils import NormalizeActions
+from magic_rl.networks import ContinuousActionValueNetwork, ContinuousPolicyNetwork
 
 
-class SacAgent(Agent):
+class SacAgent(object):
+    '''Soft Actor-Critic (SAC-v2) algorithm for continuous action space | https://arxiv.org/abs/1812.05905
     '''
-    Soft Actor-Critic version 2
-    using target Q instead of V net: 2 Q net, 2 target Q net, 1 policy net
-    add alpha loss compared with version 1
-    paper: https://arxiv.org/pdf/1812.05905.pdf
-    '''
-    
-    def __init__(self, state_dim, action_dim, hidden_dim, action_range, device):
-        self.device = device
 
-        self.soft_q_net1 = CriticNetwork(state_dim, action_dim, hidden_dim).to(self.device)
-        self.soft_q_net2 = CriticNetwork(state_dim, action_dim, hidden_dim).to(self.device)
-        self.target_soft_q_net1 = CriticNetwork(state_dim, action_dim, hidden_dim).to(self.device)
-        self.target_soft_q_net2 = CriticNetwork(state_dim, action_dim, hidden_dim).to(self.device)
-        self.policy_net = ActorNetwork(state_dim, action_dim, hidden_dim, action_range).to(self.device)
-        self.log_alpha = torch.zeros(1, dtype=torch.float32, requires_grad=True, device=self.device)
-        self.alpha = self.log_alpha.exp()
-
-        for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):
-            target_param.data.copy_(param.data)
-        for target_param, param in zip(self.target_soft_q_net2.parameters(), self.soft_q_net2.parameters()):
-            target_param.data.copy_(param.data)
-
-        self.soft_q_optimizer1 = optim.Adam(self.soft_q_net1.parameters(), lr=3e-4)
-        self.soft_q_optimizer2 = optim.Adam(self.soft_q_net2.parameters(), lr=3e-4)
-        self.policy_optimizer = optim.Adam(self.policy_net.parameters(), lr=3e-4)
-        self.alpha_optimizer = optim.Adam([self.log_alpha], lr=3e-4)
-
-    def evaluate(self, state, epsilon=1e-6):
-        '''
-        generate sampled action with state as input wrt the policy network;
-        '''
-        mean, log_std = self.policy_net(state)
-        std = log_std.exp() # no clip in evaluation, clip affects gradients flow
+    def __init__(self, obs_dims:int, act_dims:int, hidden_dims:list, gamma=0.99, tau=0.005, q_lr=3e-4, pi_lr=3e-4, a_lr=3e-4, auto_entropy=True, device:str='cpu', **kwargs):
+        self.gamma = gamma
+        self.tau = tau
+        self.auto_entropy = auto_entropy
+        self.device = torch.device(device)
         
-        normal = Normal(0, 1)
-        z      = normal.sample(mean.shape) 
-        action_0 = torch.tanh(mean + std*z.to(self.device)) # TanhNormal distribution as actions; reparameterization trick
-        action = 1. * action_0
-        # The log-likelihood here is for the TanhNorm distribution instead of only Gaussian distribution. \
-        # The TanhNorm forces the Gaussian with infinite action range to be finite. \
-        # For the three terms in this log-likelihood estimation: \
-        # (1). the first term is the log probability of action as in common \
-        # stochastic Gaussian action policy (without Tanh); \
-        # (2). the second term is the caused by the Tanh(), \
-        # as shown in appendix C. Enforcing Action Bounds of https://arxiv.org/pdf/1801.01290.pdf, \
-        # the epsilon is for preventing the negative cases in log; \
-        # (3). the third term is caused by the action range I used in this code is not (-1, 1) but with \
-        # an arbitrary action range, which is slightly different from original paper.
-        log_prob = Normal(mean, std).log_prob(mean+ std*z.to(self.device)) - torch.log(1. - action_0.pow(2) + epsilon) -  np.log(1.)
-        # both dims of normal.log_prob and -log(1-a**2) are (N,dim_of_action); 
-        # the Normal.log_prob outputs the same dim of input features instead of 1 dim probability, 
-        # needs sum up across the features dim to get 1 dim prob; or else use Multivariate Normal.
-        log_prob = log_prob.sum(dim=1, keepdim=True)
-        return action, log_prob, z, mean, log_std
+        self.entropy_target = - act_dims
 
-    def get_action(self, state, deterministic):
-        state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-        mean, log_std = self.policy_net(state)
-        std = log_std.exp()
-        
-        normal = Normal(0, 1)
-        z      = normal.sample(mean.shape).to(self.device)
-        action = torch.tanh(mean + std*z) # or using normal.rsample() for reparameterization trick (mean + std * N(0,1))
-        action = torch.tanh(mean).detach().cpu().numpy()[0] if deterministic else action.detach().cpu().numpy()[0]
-        
-        return action
-    
-    def update(self, batch_buff, auto_entropy=True, target_entropy=-2, reward_scale=5., gamma=0.99, soft_tau=0.005):
-        # Sampling from replay buffer
-        state, action, reward, next_state, terminated, truncated = batch_buff
+        self.q_1_net = ContinuousActionValueNetwork(obs_dims, act_dims, hidden_dims).to(self.device)
+        self.q_1_optim = torch.optim.Adam(self.q_1_net.parameters(), lr=q_lr)
 
-        state      = torch.FloatTensor(state).to(self.device)
-        next_state = torch.FloatTensor(next_state).to(self.device)
-        action     = torch.FloatTensor(action).to(self.device)
-        reward     = torch.FloatTensor(reward).unsqueeze(1).to(self.device)  # reward is single value, unsqueeze() to add one dim to be [reward] at the sample dim;
-        terminated = torch.FloatTensor(np.float32(terminated)).unsqueeze(1).to(self.device)
-        truncated  = torch.FloatTensor(np.float32(truncated)).unsqueeze(1).to(self.device)
+        self.q_2_net = ContinuousActionValueNetwork(obs_dims, act_dims, hidden_dims).to(self.device)
+        self.q_2_optim = torch.optim.Adam(self.q_2_net.parameters(), lr=q_lr)
 
-        # FIXME or annotate it
-        # reward = reward_scale * (reward - reward.mean(dim=0)) / (reward.std(dim=0) + 1e-6) # normalize with batch mean and std; plus a small number to prevent numerical problem
+        self.pi_net = ContinuousPolicyNetwork(obs_dims, act_dims, hidden_dims).to(self.device)
+        self.pi_optim = torch.optim.Adam(self.pi_net.parameters(), lr=pi_lr)
 
-        # Training Q Function
-        # FIXME with torch.no_grad():
-        new_next_action, next_log_prob, _, _, _ = self.evaluate(next_state)
-        target_q_min = torch.min(self.target_soft_q_net1(next_state, new_next_action), self.target_soft_q_net2(next_state, new_next_action)) - self.alpha * next_log_prob
-        target_q_value = reward + (1 - terminated) * gamma * target_q_min # if done == 1, only reward
+        self.log_alpha = torch.tensor([0.0], dtype=torch.float32, requires_grad=True, device=self.device)  # FIXME set_train and save_model like 'torch.nn'
+        self.log_alpha_optim = torch.optim.Adam([self.log_alpha], lr=a_lr)
 
-        predicted_q_value1 = self.soft_q_net1(state, action)
-        predicted_q_value2 = self.soft_q_net2(state, action)
-        q_value_loss1 = nn.MSELoss()(predicted_q_value1, target_q_value.detach())  # detach: no gradients for the variable
-        q_value_loss2 = nn.MSELoss()(predicted_q_value2, target_q_value.detach())
+        # target network for 'over-value' problem
+        self.q_1_net_ = ContinuousActionValueNetwork(obs_dims, act_dims, hidden_dims).to(self.device)
+        for param, param_ in zip(self.q_1_net.parameters(), self.q_1_net_.parameters()):
+            param_.data.copy_(param.data)
 
-        self.soft_q_optimizer1.zero_grad()
-        q_value_loss1.backward()
-        nn.utils.clip_grad_norm_(self.soft_q_net1.parameters(), 0.5)
-        self.soft_q_optimizer1.step()
-        
-        self.soft_q_optimizer2.zero_grad()
-        q_value_loss2.backward()
-        nn.utils.clip_grad_norm_(self.soft_q_net2.parameters(), 0.5)
-        self.soft_q_optimizer2.step()  
+        self.q_2_net_ = ContinuousActionValueNetwork(obs_dims, act_dims, hidden_dims).to(self.device)
+        for param, param_ in zip(self.q_2_net.parameters(), self.q_2_net_.parameters()):
+            param_.data.copy_(param.data)
 
-        # Training Policy Function
-        new_action, log_prob, _, _, _ = self.evaluate(state)
-        predicted_new_q_value = torch.min(self.soft_q_net1(state, new_action),self.soft_q_net2(state, new_action))
-        policy_loss = (self.alpha * log_prob - predicted_new_q_value).mean()
-
-        self.policy_optimizer.zero_grad()
-        policy_loss.backward()
-        nn.utils.clip_grad_norm_(self.policy_net.parameters(), 0.5)
-        self.policy_optimizer.step()
-
-        # Updating alpha wrt entropy
-        # alpha = 0.0  # trade-off between exploration (max entropy) and exploitation (max Q) 
-        if auto_entropy is True:
-            # FIXME with torch.no_grad():
-            _, log_prob, _, _, _ = self.evaluate(state)
-            alpha_loss = -(self.log_alpha * (log_prob + target_entropy).detach()).mean()
-            
-            self.alpha_optimizer.zero_grad()
-            alpha_loss.backward()
-            self.alpha_optimizer.step()
-            
-            self.alpha = self.log_alpha.exp()
-        else:
-            self.alpha = 1.
-            alpha_loss = 0
-
-        # Soft update the target value net
-        for target_param, param in zip(self.target_soft_q_net1.parameters(), self.soft_q_net1.parameters()):
-            target_param.data.copy_(target_param.data * (1.0 - soft_tau) + param.data * soft_tau)
-        for target_param, param in zip(self.target_soft_q_net2.parameters(), self.soft_q_net2.parameters()):
-            target_param.data.copy_(target_param.data * (1.0 - soft_tau) + param.data * soft_tau)
-        
-        return q_value_loss1, q_value_loss2, policy_loss, alpha_loss
-
-    def save_model(self, wb_dir):
-        if not os.path.exists(wb_dir): 
-            os.makedirs(wb_dir)
-        torch.save(self.soft_q_net1.state_dict(), os.path.join(wb_dir, "q1.pth"))
-        torch.save(self.soft_q_net2.state_dict(), os.path.join(wb_dir, "q2.pth"))
-        torch.save(self.policy_net.state_dict(), os.path.join(wb_dir, "policy.pth"))
-
-    def load_model(self, wb_dir):
-        assert os.path.exists(wb_dir), f"Directory '{wb_dir}' of weights and biases is not exist."
-        self.soft_q_net1.load_state_dict(torch.load(os.path.join(wb_dir, "q1.pth")))
-        self.soft_q_net2.load_state_dict(torch.load(os.path.join(wb_dir, "q2.pth")))
-        self.policy_net.load_state_dict(torch.load(os.path.join(wb_dir, "policy.pth")))
+    @property
+    def name(self):
+        return 'SAC'
 
     def set_train(self):
-        self.soft_q_net1.train()
-        self.soft_q_net2.train()
-        self.policy_net.train()
+        self.q_1_net.train()
+        self.q_2_net.train()
+        self.pi_net.train()
 
     def set_eval(self):
-        self.soft_q_net1.eval()
-        self.soft_q_net2.eval()
-        self.policy_net.eval()
+        self.q_1_net.eval()
+        self.q_2_net.eval()
+        self.pi_net.eval()
+
+    def save_model(self, dir):
+        if not os.path.exists(dir): 
+            os.makedirs(dir)
+        torch.save(self.q_1_net.state_dict(), os.path.join(dir, "q_1.pth"))
+        torch.save(self.q_2_net.state_dict(), os.path.join(dir, "q_2.pth"))
+        torch.save(self.pi_net.state_dict(), os.path.join(dir, "pi.pth"))
+
+    def load_model(self, dir):
+        assert os.path.exists(dir), f"Directory '{dir}' of weights and biases is NOT exist."
+        self.q_1_net.load_state_dict(torch.load(os.path.join(dir, "q_1.pth")))
+        self.q_2_net.load_state_dict(torch.load(os.path.join(dir, "q_2.pth")))
+        self.pi_net.load_state_dict(torch.load(os.path.join(dir, "pi.pth")))
+
+    def get_action(self, state:np.ndarray, deterministic=False) -> np.ndarray:  # only be called by outside
+        mean, log_std = self.pi_net(torch.FloatTensor(state).to(self.device))
+        std = log_std.exp()
+        if deterministic:
+            act = torch.tanh(mean)
+        else:
+            # 1. re-parameterization trick: (mean + std * N(0,1)), also can be replaced by using 'Normal(mean, std).rsample()'
+            # 2. 'tanh()' is used to convert infinity value into finity value within (-1, 1)
+            z = Normal(0, 1).sample(mean.shape).to(self.device)
+            act = torch.tanh(mean + std * z)
+        return act.detach().cpu().numpy()
+    
+    def _get_action(self, state:torch.Tensor):  # only be called by inside
+        mean, log_std = self.pi_net(state)
+        std = log_std.exp()
+        
+        z = Normal(0, 1).sample(mean.shape).to(self.device)
+        u = mean + std * z
+        act = torch.tanh(u)
+        
+        eps = torch.finfo(torch.float32).eps
+        log_prob = Normal(mean, std).log_prob(u) - torch.log(1.0 - act.pow(2) + eps) - np.log(1.0)
+        log_prob = log_prob.sum(dim=1, keepdim=True)
+        return act, log_prob
+    
+    def update(self, batch_buff):
+        self.set_train()
+
+        obs, act, rew, next_obs, ter, tru = batch_buff
+
+        obs = torch.FloatTensor(obs).to(self.device)
+        next_obs = torch.FloatTensor(next_obs).to(self.device)
+        act = torch.FloatTensor(act).to(self.device)
+        rew = torch.FloatTensor(rew).unsqueeze(1).to(self.device)
+        ter = torch.FloatTensor(np.float32(ter)).unsqueeze(1).to(self.device)
+        tru = torch.FloatTensor(np.float32(tru)).unsqueeze(1).to(self.device)
+
+        # TODO reward re-scale
+
+        # update action-value function (Q function) using TD (Temporal Difference) method
+        next_act, next_log_prob = self._get_action(next_obs)
+        next_q = torch.min(self.q_1_net_(next_obs, next_act), self.q_2_net_(next_obs, next_act)) - self.log_alpha.exp() * next_log_prob
+        td_q = rew + (1 - ter) * self.gamma * next_q
+
+        curr_q_1 = self.q_1_net(obs, act)  # use old_act cause the next_obs is induced by old_obs and old_act
+        curr_q_2 = self.q_2_net(obs, act)
+        q_1_loss = torch.nn.MSELoss()(curr_q_1, td_q.detach())
+        q_2_loss = torch.nn.MSELoss()(curr_q_2, td_q.detach())
+
+        self.q_1_optim.zero_grad()
+        q_1_loss.backward()
+        self.q_1_optim.step()
+        
+        self.q_2_optim.zero_grad()
+        q_2_loss.backward()
+        self.q_2_optim.step()  
+
+        # update policy function (pi function)
+        pred_act, pred_log_prob = self._get_action(obs)  # TODO use new 'act' is correct?
+        pred_q_value = torch.min(self.q_1_net(obs, pred_act), self.q_2_net(obs, pred_act))
+        pi_loss = (self.log_alpha.exp() * pred_log_prob - pred_q_value).mean()  # TODO why pred_q_value.detach() is wrong?
+
+        self.pi_optim.zero_grad()
+        pi_loss.backward()
+        self.pi_optim.step()
+
+        # update alpha (wrt entropy)
+        if self.auto_entropy:  # auto entropy: trade-off between exploration (max entropy) and exploitation (max Q)
+            _, pred_log_prob = self._get_action(obs)
+            log_alpha_loss = (- self.log_alpha.exp() * (pred_log_prob + self.entropy_target).detach()).mean()
+            
+            self.log_alpha_optim.zero_grad()
+            log_alpha_loss.backward()
+            self.log_alpha_optim.step()
+        else:
+            self.log_alpha = 0.0
+            log_alpha_loss = 0.0
+
+        # update the target action-value function (Target Q function) softly
+        for param, param_ in zip(self.q_1_net.parameters(), self.q_1_net_.parameters()):
+            param_.data.copy_(param.data * self.tau + param_.data * (1.0 - self.tau))
+        for param, param_ in zip(self.q_2_net.parameters(), self.q_2_net_.parameters()):
+            param_.data.copy_(param.data * self.tau + param_.data * (1.0 - self.tau))
+        
+        return {'loss/q_1':q_1_loss.detach().cpu().numpy(), 'loss/q_2':q_2_loss.detach().cpu().numpy(), 
+                'loss/pi':pi_loss.detach().cpu().numpy(), 'loss/log_alpha':log_alpha_loss.detach().cpu().numpy()}
 
 
 if __name__ == '__main__':
-    # choose env
-    # env = NormalizeActions(gym.make("Pendulum-v0"))
-    # env = NormalizeActions(gym.make("LunarLanderContinuous-v2"))
-    env = NormalizeActions(gym.make("Pendulum-v0"))
+    # hyper-params
+    max_steps = 1e6
+    batch_size = 256
+    average_range = 50
 
-    # replay buffer
-    replay_buffer = ReplayBuffer(1e6)
+    # env
+    env_name = ['Pendulum-v1', 'LunarLanderContinuous-v2'][1]
+    env = gym.make(env_name)
+
+    # buffer
+    from magic_rl.buffers import ReplayBuffer
+    buffer = ReplayBuffer(1e6)
 
     # agent
-    state_dim  = env.observation_space.shape[0]
-    action_dim = env.action_space.shape[0]
-    action_range = 1.
-    sac_agent = SacAgent(state_dim=state_dim, action_dim=action_dim, hidden_dim=256, replay_buffer=replay_buffer, action_range=action_range, device=torch.device("cuda:0"))
+    assert isinstance(env.action_space, gym.spaces.Box), "Only support CONTINUOUS action space yet."
+    agent = SacAgent(env.observation_space.shape[0], env.action_space.shape[0], hidden_dims=[256, 256], gamma=0.99, tau=0.005, q_lr=3e-4, pi_lr=3e-4, a_lr=3e-4, device='cuda')
 
     # logger
     from torch.utils.tensorboard import SummaryWriter
-    # sac_logger = SummaryWriter(log_dir="outputs/sac_v2/log/Pendulum-v1/3/")
-    # sac_logger = SummaryWriter(log_dir="outputs/sac_v2/log/LunarLanderContinuous-v2/")
-    sac_logger = SummaryWriter(log_dir="outputs/sac_v2/log/FishGym-v2/5/")
+    uid = str(uuid.uuid1()).split('-')[0]
+    logger = SummaryWriter(log_dir=f"./tensorboard/{env_name}/{agent.name}/{uid}")
 
-    # hyper-parameters for RL training
-    batch_size  = 256
-
-    all_steps = 0
-    # training loop
-    for episode in range(1_000_000+1):
-        obs =  env.reset()
-        print("env reset successed.")
-        episode_reward = 0
+    # training
+    steps, episodes, returns = 0, 0, []
+    while steps <= max_steps:
+        episode_rew = 0
         episode_len = 0
-        for step in range(150):
-            action = sac_agent.get_action(obs, deterministic = False)
-            next_obs, reward, done, _ = env.step(action)
-            # env.render()
+
+        obs, _ = env.reset()
+        while True:  # one rollout
+            act = agent.get_action(obs, deterministic=False)
+            next_obs, rew, ter, tru, _ = env.step(act)
                 
-            replay_buffer.push(obs, action, reward, next_obs, done)
-            
+            buffer.push(obs, act, rew, next_obs, ter, tru)
             obs = next_obs
-            episode_reward += reward
+
+            steps += 1
             episode_len += 1
-            all_steps += 1
+            episode_rew += rew
             
-            if len(replay_buffer) > batch_size:
-                q_value_loss1, q_value_loss2, policy_loss, alpha_loss = sac_agent.update(batch_size, reward_scale=20., auto_entropy=True, target_entropy=-4)
-                sac_logger.add_scalar("loss/q_value_loss1", q_value_loss1, all_steps)
-                sac_logger.add_scalar("loss/q_value_loss2", q_value_loss2, all_steps)
-                sac_logger.add_scalar("loss/policy_loss", policy_loss, all_steps)
-                sac_logger.add_scalar("loss/alpha_loss", alpha_loss, all_steps)
-                    
-            if done:
+            if len(buffer) > batch_size:
+                loss_log = agent.update(buffer.sample(batch_size))
+                for key, value in loss_log.items():
+                    logger.add_scalar(key, value, steps)
+
+            if ter or tru:
                 break
         
-        sac_logger.add_scalar("episode/reward", episode_reward, all_steps)
-        sac_logger.add_scalar("episode/len", episode_len, all_steps)
-        print(f"Episode: {episode} | Episode Reward: {episode_reward}")
-        # env.save_traj(suffix=f"{all_steps}".zfill(10))
-        print("save img successed, waiting to reset env.")
+        episodes += 1
 
+        returns.append(episode_rew)
+        average_return = np.array(returns).mean() if len(returns) <= average_range else np.array(returns[-(average_range+1):-1]).mean()
+
+        # verbose
+        print(f"UID: {uid} | Steps: {steps} | Episodes: {episodes} | Episode Length: {episode_len} | Episode Reward: {episode_rew} | Average Return: {average_return}")
+        
+        # logging
+        logger.add_scalar('episodic/return', episode_rew, steps)
+        logger.add_scalar('episodic/length', episode_len, steps)
+        logger.add_scalar('episodic/return(average)', average_return, steps)

@@ -1,28 +1,31 @@
-'''
-FilePath: /MAgIC-RL/magic_rl/agents/agent.py
-Date: 2022-12-18 11:30:59
-LastEditTime: 2022-12-18 11:39:53
-Author: Xiaozhu Lin
-E-Mail: linxzh@shanghaitech.edu.cn
-Institution: MAgIC Lab, ShanghaiTech University, China
-SoftWare: VSCode
-'''
+import numpy as np
 
 
 class Agent(object):
-    '''
-    This is a base class for all rl agents.
+    '''Base class for all rl agents.
     '''
     
-    def __init__(self) -> None:
-        pass
+    def __init__(self, **kwargs) -> None:
+        raise NotImplementedError
+    
+    @property
+    def name(self) -> str:
+        raise NotImplementedError
 
-    def get_action(self):
-        pass
+    def set_train(self) -> None:
+        raise NotImplementedError
+    
+    def set_eval(self) -> None:
+        raise NotImplementedError
 
-    def update(self):
-        pass
+    def save_model(self) -> None:
+        raise NotImplementedError
+    
+    def load_model(self) -> None:
+        raise NotImplementedError
+    
+    def get_action(self) -> np.ndarray:
+        raise NotImplementedError
 
-    def save_model(self):
-        pass
-
+    def update(self) -> dict:
+        raise NotImplementedError

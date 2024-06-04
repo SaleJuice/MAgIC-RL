@@ -1,103 +1,84 @@
-'''
-FilePath: /MAgIC-RL/magic_rl/networks/network.py
-Date: 2022-08-31 15:49:33
-LastEditTime: 2023-01-23 19:13:58
-Author: Xiaozhu Lin
-E-Mail: linxzh@shanghaitech.edu.cn
-Institution: MAgIC Lab, ShanghaiTech University, China
-SoftWare: VSCode
-'''
-
-import os
-
-import math
-import numpy as np
-
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch.distributions import Normal
 
 
-def reset_parameters(linear:nn.Linear):
-    stdv = 1. / math.sqrt(linear.weight.size(1))
-    linear.weight.data.uniform_(-stdv, stdv)
-    if linear.bias is not None:
-        linear.bias.data.uniform_(-stdv, stdv)
-
-
-# network models used by SAC-v2 algorithm:
-# ----------------------------------------
-
-class CriticNetwork(nn.Module):
-    '''
-    Attention: this is critic network for continuous observation continuous action(COCA).
-    '''
-    def __init__(self, state_dims:int, action_dims:int, hidden_size, init_w=3e-3):
-        super(CriticNetwork, self).__init__()
-        
-        # TODO to achieve more flexible hidden size
-        # build architecture of network
-        self.linear1 = nn.Linear(state_dims + action_dims, hidden_size)
-        self.linear2 = nn.Linear(hidden_size, hidden_size)
-        self.linear3 = nn.Linear(hidden_size, 1)
-
-        # TODO to achieve more autonomy random init w&b
-        # init weight and bias of network
-        self.linear3.weight.data.uniform_(-init_w, init_w)
-        self.linear3.bias.data.uniform_(-init_w, init_w)
+class ContinuousActionValueNetwork(torch.nn.Module):
+    def __init__(self, state_dims:int, action_dims:int, hidden_size:list):
+        super().__init__()
+        self.layers = []
+        self.layers.append(torch.nn.Linear(state_dims + action_dims, hidden_size[0]))
+        for i in range(len(hidden_size)-1):
+            self.layers.append(torch.nn.Linear(hidden_size[i], hidden_size[i+1]))
+        self.layers.append(torch.nn.Linear(hidden_size[-1], 1))
+        self.layers = torch.nn.ModuleList(self.layers)
 
     def forward(self, state, action):
-        x = torch.cat([state, action], 1)  # the dim 0 is number of batch, which means state.shape[0] == action.shape[0].
-        x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
-        x = self.linear3(x)
-        
-        return x  # value of this action under this state
+        x = torch.concatenate([state, action], dim=1)
+        for i in range(len(self.layers)-1):
+            x = torch.nn.functional.relu(self.layers[i](x))
+        x = self.layers[-1](x)
+        return x
 
 
-class ActorNetwork(nn.Module):
-    '''
-    Attention: this is policy network for continuous observation continuous action(COCA).
-    '''
-    def __init__(self, state_dims:int, action_dims:int, hidden_size, action_range=1., init_w=3e-3, log_std_min=-20, log_std_max=2):
-        super(ActorNetwork, self).__init__()
-        
-        # TODO to achieve more flexible hidden size
-        # build architecture of network
-        self.linear1 = nn.Linear(state_dims, hidden_size)
-        self.linear2 = nn.Linear(hidden_size, hidden_size)
-        self.linear_mean = nn.Linear(hidden_size, action_dims)
-        self.linear_log_std = nn.Linear(hidden_size, action_dims)
-        
-        # TODO to achieve more autonomy random init w&b
-        # init weight and bias of network
-        self.linear_mean.weight.data.uniform_(-init_w, init_w)
-        self.linear_mean.bias.data.uniform_(-init_w, init_w)
-
-        self.linear_log_std.weight.data.uniform_(-init_w, init_w)
-        self.linear_log_std.bias.data.uniform_(-init_w, init_w)
-
-        # varibales
-        self.log_std_min = log_std_min
-        self.log_std_max = log_std_max
-
-        self.action_range = action_range
-        self.num_actions = action_dims
+class DiscretePolicyNetwork(torch.nn.Module):
+    def __init__(self, state_dims:int, action_nums:int, hidden_size:list):
+        super().__init__()
+        self.layers = []
+        self.layers.append(torch.nn.Linear(state_dims, hidden_size[0]))
+        for i in range(len(hidden_size)-1):
+            self.layers.append(torch.nn.Linear(hidden_size[i], hidden_size[i+1]))
+        self.layers.append(torch.nn.Linear(hidden_size[-1], action_nums))
+        self.layers = torch.nn.ModuleList(self.layers)
 
     def forward(self, state):
-        x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
+        x = state
+        for i in range(len(self.layers)-1):
+            x = torch.nn.functional.relu(self.layers[i](x))
+        x = torch.nn.functional.softmax(self.layers[-1](x), dim=-1)
+        return x
+    
 
-        mean = F.leaky_relu(self.linear_mean(x))
-        log_std = F.leaky_relu(self.linear_log_std(x))
-        log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
+class ContinuousPolicyNetwork(torch.nn.Module):
+    def __init__(self, state_dims:int, action_dims:int, hidden_size:list, log_std_range=(-20, 2)):
+        super().__init__()
+        self.layers = []
+        self.layers.append(torch.nn.Linear(state_dims, hidden_size[0]))
+        for i in range(len(hidden_size)-1):
+            self.layers.append(torch.nn.Linear(hidden_size[i], hidden_size[i+1]))
+        self.layers.append(torch.nn.Linear(hidden_size[-1], action_dims))  # second to last layer (-2) mean of action
+        self.layers.append(torch.nn.Linear(hidden_size[-1], action_dims))  # last layer (-1) log_std of action
+        self.layers = torch.nn.ModuleList(self.layers)
 
-        return mean, log_std  # mean and log(std) of the action under this state
-        
-# ----------------------------------------
+        self.log_std_range = log_std_range
+
+    def forward(self, state):
+        x = state
+        for i in range(len(self.layers)-2):
+            x = torch.nn.functional.relu(self.layers[i](x))
+        mean = self.layers[-2](x)
+        log_std = torch.clamp(self.layers[-1](x), *self.log_std_range)
+        return mean, log_std
+    
+
+class StateValueNetwork(torch.nn.Module):
+    def __init__(self, state_dims:int, hidden_size:list):
+        super().__init__()
+        self.layers = []
+        self.layers.append(torch.nn.Linear(state_dims, hidden_size[0]))
+        for i in range(len(hidden_size)-1):
+            self.layers.append(torch.nn.Linear(hidden_size[i], hidden_size[i+1]))
+        self.layers.append(torch.nn.Linear(hidden_size[-1], 1))
+        self.layers = torch.nn.ModuleList(self.layers)
+
+    def forward(self, state):
+        x = state
+        for i in range(len(self.layers)-1):
+            x = torch.nn.functional.relu(self.layers[i](x))
+        x = self.layers[-1](x)
+        return x
 
 
 if __name__ == '__main__':
-    pass
+    q_net = ContinuousActionValueNetwork(state_dims=8, action_dims=3, hidden_size=[64]).to(torch.device('cpu'))
+    pi_net = ContinuousPolicyNetwork(state_dims=8, action_dims=3, hidden_size=[64]).to(torch.device('cpu'))
+    v_net = StateValueNetwork(state_dims=8, hidden_size=[64]).to(torch.device('cpu'))
+    pi_net = DiscretePolicyNetwork(state_dims=8, action_nums=3, hidden_size=[64]).to(torch.device('cpu'))
